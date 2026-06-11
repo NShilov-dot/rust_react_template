@@ -6,6 +6,6 @@ pub mod ports;
 pub mod users;
 
 pub use ports::{
-    CacheError, CacheStore, HasherError, PasswordHasher, RepoError, SessionError, SessionManager,
-    TokenPair, UserRepository,
+    AuthRequest, CacheError, CacheStore, GoogleAuthClient, GoogleUserInfo, HasherError, OAuthError,
+    PasswordHasher, RepoError, SessionError, SessionManager, TokenPair, UserRepository,
 };

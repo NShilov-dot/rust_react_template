@@ -93,6 +93,16 @@ Migrations are embedded into the binary via `sqlx::migrate!("../../migrations")`
 - Refresh token goes in an **HttpOnly cookie** (Set-Cookie on register/login/refresh), NOT in the JSON body. Only the access token is in JSON.
 - Rate limiting: `tower_governor` per-IP, with `SmartIpKeyExtractor` reading `Forwarded`/`X-Forwarded-For` (nginx) and falling back to `ConnectInfo` (direct curl). That's why `main.rs` uses `into_make_service_with_connect_info::<SocketAddr>`.
 
+### Google OAuth — design notes
+
+- **Server-side Authorization Code + PKCE + state**. Frontend never sees `client_secret`; the SPA just navigates to `/api/auth/google/start`.
+- **`GoogleAuth` use case** (`application/auth/google.rs`) owns the linking policy. Three branches: known `google_id` → log in; new `google_id` + verified-email match → auto-link existing user; otherwise → create OAuth-only user (NULL `password_hash`). **Auto-link only happens when Google asserts `email_verified=true`** — otherwise we refuse, since unverified linking is the classic account-takeover vector.
+- **State + PKCE storage** uses the existing `CacheStore` (Redis), key `oauth:google:state:<csrf>`, TTL 5 min, deleted after first use (one-shot replay protection).
+- **Schema**: `password_hash` is now NULLable. New OAuth users have `password_hash IS NULL` + a `google_id`. `find_for_login` filters `WHERE password_hash IS NOT NULL`, so password-login for an OAuth-only account fails as `InvalidCredentials` (semantically correct, doesn't leak account existence).
+- **Feature toggle**: if `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing, `GoogleAuth` is `None` in `AppState` and the routes respond `503`. No env, no feature, no compile-time on/off switch.
+- **Callback redirect**: backend sets the refresh cookie and 302s to `OAUTH_POST_LOGIN_REDIRECT` (default `/dashboard`). The SPA's `SessionBootstrap` runs on the new page load, the cookie is present, silent `/auth/refresh` populates the in-memory access token. On failure the redirect target is `OAUTH_ERROR_REDIRECT` (default `/login`) with `?oauth_error=<code>` — the `useOAuthError` hook on the SPA reads, displays, then strips it.
+- **Error codes** (kept stable, see `api/handlers/google.rs` `classify()`): `denied`, `expired`, `unverified`, `network`, `internal`, `bad_request`. They're deliberately vague — never reveal "email exists" or "google already linked" via the redirect.
+
 ### Frontend — XSS-resistant auth pattern
 
 The auth flow in `src/lib/api.ts` + `src/lib/auth-store.ts` enforces a specific XSS-resistant pattern. **Do not break it casually:**

@@ -70,6 +70,17 @@ jsonwebtoken = "9"
 rand = "0.8"
 base64 = "0.22"
 
+# OAuth2 (Google)
+oauth2 = "4"
+# Used only by the OAuth client to call Google's userinfo endpoint.
+# `rustls-tls` keeps us off OpenSSL; `gzip` cuts response size; `json` for `.json()`.
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "json",
+    "gzip",
+] }
+url = "2"
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

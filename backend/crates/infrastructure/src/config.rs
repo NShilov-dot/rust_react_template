@@ -9,6 +9,7 @@ pub struct Config {
     pub log_level: String,
     pub db_max_connections: u32,
     pub auth: AuthConfig,
+    pub google: Option<GoogleConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -17,6 +18,24 @@ pub struct AuthConfig {
     pub jwt_issuer: String,
     pub access_ttl: Duration,
     pub refresh_ttl: Duration,
+}
+
+/// Google OAuth — populated only if both `GOOGLE_CLIENT_ID` and
+/// `GOOGLE_CLIENT_SECRET` are set. With neither, the `/auth/google/*`
+/// routes return 503 (the feature is just off).
+#[derive(Debug, Clone)]
+pub struct GoogleConfig {
+    pub client_id: String,
+    pub client_secret: String,
+    /// Must exactly match what's registered in the Google OAuth console.
+    /// Dev default: `http://localhost:5173/api/auth/google/callback`
+    /// (routed through edge nginx → backend).
+    pub redirect_uri: String,
+    /// Where the user lands after a successful callback. Browser sees
+    /// the edge origin, so a path-relative string is fine.
+    pub post_login_redirect: String,
+    /// Where the user lands when something goes wrong. Path-relative.
+    pub error_redirect: String,
 }
 
 impl Config {
@@ -48,6 +67,24 @@ impl Config {
         let access_ttl_secs: u64 = parse_env("ACCESS_TTL_SECS", 900)?; // 15 min
         let refresh_ttl_secs: u64 = parse_env("REFRESH_TTL_SECS", 60 * 60 * 24 * 30)?; // 30 days
 
+        let google = match (
+            std::env::var("GOOGLE_CLIENT_ID").ok().filter(|s| !s.is_empty()),
+            std::env::var("GOOGLE_CLIENT_SECRET").ok().filter(|s| !s.is_empty()),
+        ) {
+            (Some(client_id), Some(client_secret)) => Some(GoogleConfig {
+                client_id,
+                client_secret,
+                redirect_uri: std::env::var("GOOGLE_REDIRECT_URI").unwrap_or_else(|_| {
+                    "http://localhost:5173/api/auth/google/callback".into()
+                }),
+                post_login_redirect: std::env::var("OAUTH_POST_LOGIN_REDIRECT")
+                    .unwrap_or_else(|_| "/dashboard".into()),
+                error_redirect: std::env::var("OAUTH_ERROR_REDIRECT")
+                    .unwrap_or_else(|_| "/login".into()),
+            }),
+            _ => None,
+        };
+
         Ok(Self {
             database_url,
             redis_url,
@@ -60,6 +97,7 @@ impl Config {
                 access_ttl: Duration::from_secs(access_ttl_secs),
                 refresh_ttl: Duration::from_secs(refresh_ttl_secs),
             },
+            google,
         })
     }
 }

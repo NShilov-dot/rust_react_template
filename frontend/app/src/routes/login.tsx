@@ -7,7 +7,9 @@ import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { GoogleButton, OAuthDivider } from '@/components/google-button';
 import { useAuth } from '@/hooks/use-auth';
+import { useOAuthError } from '@/hooks/use-oauth-error';
 import { ApiError } from '@/lib/api';
 
 const schema = z.object({
@@ -26,6 +28,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [serverError, setServerError] = useState<string | null>(null);
+  const oauthError = useOAuthError();
 
   const {
     register,
@@ -61,7 +64,21 @@ export default function LoginPage() {
         </p>
       </div>
 
-      <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
+      {oauthError && (
+        <div
+          className="mt-6 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          role="alert"
+        >
+          {oauthError}
+        </div>
+      )}
+
+      <div className="mt-6 space-y-3">
+        <GoogleButton label="Войти через Google" />
+        <OAuthDivider />
+      </div>
+
+      <form onSubmit={onSubmit} className="mt-4 space-y-4" noValidate>
         <Field label="Email" htmlFor="email" error={errors.email?.message}>
           <Input
             id="email"

@@ -49,6 +49,17 @@ pub fn router(state: AppState) -> Router {
             .finish()
             .expect("valid governor config"),
     );
+    // Google flow: looser than login (browser-driven, the user may click
+    // a couple of times) but still IP-bounded so a denial-of-service
+    // attempt against Google can't ride our quota.
+    let oauth_rl = Arc::new(
+        GovernorConfigBuilder::default()
+            .period(Duration::from_secs(6)) // ≈ 10/min sustained
+            .burst_size(10)
+            .key_extractor(SmartIpKeyExtractor)
+            .finish()
+            .expect("valid governor config"),
+    );
 
     let login = Router::new()
         .route("/auth/login", post(handlers::auth::login))
@@ -62,6 +73,11 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/refresh", post(handlers::auth::refresh))
         .layer(GovernorLayer::new(refresh_rl));
 
+    let oauth = Router::new()
+        .route("/auth/google/start", get(handlers::google::start))
+        .route("/auth/google/callback", get(handlers::google::callback))
+        .layer(GovernorLayer::new(oauth_rl));
+
     // ─── Routes without rate limit ─────────────────────────────────────
     let unlimited = Router::new()
         .route("/health", get(handlers::health::health))
@@ -74,6 +90,7 @@ pub fn router(state: AppState) -> Router {
         .merge(login)
         .merge(register)
         .merge(refresh)
+        .merge(oauth)
         .merge(unlimited)
         // ─── Global response headers ───────────────────────────────────
         // `nosniff` prevents browsers from MIME-sniffing JSON as HTML/JS.

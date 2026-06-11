@@ -1,0 +1,52 @@
+# ─── Env files (NEVER commit secrets) ────────────────────────────
+.env
+.env.*
+*.env
+!.env.example
+!**/.env.example
+
+# ─── Rust ────────────────────────────────────────────────────────
+# Cargo.lock IS committed (workspace contains a binary crate `api`).
+target/
+**/*.rs.bk
+
+# ─── Node / Vite ─────────────────────────────────────────────────
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+.eslintcache
+.pnp
+.pnp.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ─── Logs ────────────────────────────────────────────────────────
+*.log
+
+# ─── OS ──────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── IDE / Tooling ───────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code workspace — usually user-specific (hooks, settings.local.json).
+# Drop the line below if you decide to share project-level Claude config.
+.claude/
+
+# ─── Local-only files ────────────────────────────────────────────
+# Corporate CA cert for SSL-inspecting proxies — varies per network.
+corporate-ca.pem
+
+# Personal scratchpads / TODOs
+.scratch/
+TODO.local.md
+*.local.md

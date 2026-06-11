@@ -1,0 +1,7 @@
+/target
+.env
+**/*.rs.bk
+.DS_Store
+
+# Corporate CA cert for SSL inspection (local-only, varies per network)
+corporate-ca.pem

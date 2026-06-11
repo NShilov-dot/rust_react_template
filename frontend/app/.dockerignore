@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.git/
+.gitignore
+.env
+.env.local
+.dockerignore
+*.md
+.vscode/
+.idea/
+.DS_Store
+coverage/
+.eslintcache

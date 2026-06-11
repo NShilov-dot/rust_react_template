@@ -1,0 +1,76 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/domain",
+    "crates/application",
+    "crates/infrastructure",
+    "crates/api",
+]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.88"
+license = "MIT"
+
+[workspace.dependencies]
+# Internal crates
+domain = { path = "crates/domain" }
+application = { path = "crates/application" }
+infrastructure = { path = "crates/infrastructure" }
+
+# Async runtime
+tokio = { version = "1.40", features = ["full"] }
+
+# Web framework (axum 0.8 uses `/{id}` path-param syntax)
+axum = "0.8"
+axum-extra = { version = "0.10", features = ["cookie"] }
+cookie = "0.18"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors", "set-header"] }
+tower_governor = "0.8"
+
+# Database
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio-rustls",
+    "postgres",
+    "uuid",
+    "chrono",
+    "macros",
+    "migrate",
+] }
+
+# Redis
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+
+# Serde
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Utilities
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+
+# Errors
+thiserror = "1"
+anyhow = "1"
+
+# Async traits
+async-trait = "0.1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Config
+dotenvy = "0.15"
+
+# Auth
+argon2 = "0.5"
+jsonwebtoken = "9"
+rand = "0.8"
+base64 = "0.22"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

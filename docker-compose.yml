@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://app:app@postgres:5432/app
+      REDIS_URL: redis://redis:6379
+      BIND_ADDR: 0.0.0.0:8080
+      DB_MAX_CONNECTIONS: 10
+      RUST_LOG: ${RUST_LOG:-info,api=debug,tower_http=info}
+      # Fails fast if not provided. `cp .env.example .env` covers this for dev.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (>= 32 bytes)}
+      JWT_ISSUER: ${JWT_ISSUER:-rust-react-api}
+      ACCESS_TTL_SECS: ${ACCESS_TTL_SECS:-900}
+      REFRESH_TTL_SECS: ${REFRESH_TTL_SECS:-2592000}
+    expose:
+      - "8080"
+    ports:
+      # Also exposed publicly so `curl localhost:8080/health` works
+      # without going through nginx.
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend/app
+      dockerfile: Dockerfile
+    expose:
+      - "80"
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      # `depends_on` without condition is just startup order. The backend
+      # image is distroless (no shell → no compose healthcheck), so we can't
+      # gate on its readiness; nginx will 502 on /api/* for a few seconds
+      # during boot. The SPA itself loads via the `frontend` upstream as
+      # soon as that container is up.
+      - frontend
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

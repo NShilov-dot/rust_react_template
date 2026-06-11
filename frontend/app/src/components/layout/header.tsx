@@ -23,17 +23,27 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-14 items-center justify-between gap-4 px-4">
-        <div className="flex items-center gap-2">
+    <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/55">
+      {/* Decorative top accent — hints at the Rust/React palette without painting the whole bar. */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-orange-500/50 to-transparent"
+      />
+
+      <div className="flex h-16 items-center justify-between gap-4 px-4 md:px-6">
+        <div className="flex min-w-0 items-center gap-2">
           <SidebarToggle />
           <Brand />
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3">
           <ThemeToggle />
           {isAuthed && user ? (
             <>
+              <span
+                aria-hidden="true"
+                className="hidden h-6 w-px bg-border/70 md:inline-block"
+              />
               <UserBadge user={user} />
               <Button
                 variant="ghost"
@@ -41,8 +51,12 @@ export function Header() {
                 onClick={handleLogout}
                 aria-label="Выйти"
                 title="Выйти"
+                className="group/logout text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
               >
-                <LogOut className="h-4 w-4" aria-hidden="true" />
+                <LogOut
+                  className="h-4 w-4 transition-transform duration-200 group-hover/logout:translate-x-0.5 motion-reduce:transition-none"
+                  aria-hidden="true"
+                />
                 <span className="ml-1.5 hidden sm:inline">Выйти</span>
               </Button>
             </>
@@ -98,14 +112,42 @@ function SidebarToggle() {
 
 function Brand() {
   return (
-    <NavLink to="/" className="flex items-center gap-2">
-      <div
-        aria-hidden="true"
-        className="flex h-7 w-7 items-center justify-center rounded bg-primary text-xs font-bold text-primary-foreground"
-      >
-        R+
+    <NavLink
+      to="/"
+      aria-label="На главную"
+      className="group flex items-center gap-2.5 rounded-md outline-none ring-offset-2 ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <div className="relative">
+        <div
+          aria-hidden="true"
+          className={cn(
+            'flex h-9 w-9 items-center justify-center rounded-lg text-[13px] font-extrabold text-white shadow-sm',
+            'bg-gradient-to-br from-amber-400 via-orange-500 to-rose-600',
+            'ring-1 ring-inset ring-white/15 transition-transform duration-300 motion-reduce:transition-none',
+            'group-hover:scale-[1.04]',
+          )}
+        >
+          R+
+        </div>
+        {/* Soft halo on hover. */}
+        <span
+          aria-hidden="true"
+          className={cn(
+            'pointer-events-none absolute inset-0 -z-10 rounded-lg blur-lg opacity-0 transition-opacity duration-300 motion-reduce:transition-none',
+            'bg-gradient-to-br from-amber-400 via-orange-500 to-rose-600',
+            'group-hover:opacity-50',
+          )}
+        />
       </div>
-      <span className="hidden text-sm font-semibold sm:inline">Rust+React</span>
+
+      <div className="hidden flex-col leading-none sm:flex">
+        <span className="text-sm font-semibold tracking-tight text-foreground">
+          Rust<span className="text-orange-500">+</span>React
+        </span>
+        <span className="mt-1 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          auth scaffold
+        </span>
+      </div>
     </NavLink>
   );
 }
@@ -117,7 +159,7 @@ function GuestNav() {
         to="/login"
         className={({ isActive }) =>
           cn(
-            'inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors',
+            'group/login inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             isActive
               ? 'bg-secondary text-secondary-foreground'
@@ -125,19 +167,29 @@ function GuestNav() {
           )
         }
       >
-        <LogIn className="h-4 w-4" aria-hidden="true" />
+        <LogIn
+          className="h-4 w-4 transition-transform duration-200 group-hover/login:-translate-x-0.5 motion-reduce:transition-none"
+          aria-hidden="true"
+        />
         <span>Войти</span>
       </NavLink>
 
       <NavLink
         to="/register"
         className={cn(
-          'inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'group/register relative inline-flex h-9 items-center gap-1.5 overflow-hidden rounded-md px-3.5 text-sm font-medium text-white shadow-sm',
+          'bg-gradient-to-br from-amber-500 via-orange-500 to-rose-600',
+          'transition-all duration-200 hover:shadow-md hover:shadow-orange-500/20 motion-reduce:transition-none',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         )}
       >
-        <UserPlus className="h-4 w-4" aria-hidden="true" />
-        <span className="hidden sm:inline">Регистрация</span>
+        {/* Sheen sweep on hover */}
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-500 group-hover/register:translate-x-full motion-reduce:transition-none"
+        />
+        <UserPlus className="relative h-4 w-4" aria-hidden="true" />
+        <span className="relative hidden sm:inline">Регистрация</span>
       </NavLink>
     </nav>
   );

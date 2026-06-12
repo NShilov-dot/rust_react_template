@@ -1,0 +1,40 @@
+# Promtail tails docker container logs via the docker socket and ships
+# them to Loki. JSON-formatted log lines (from the api when LOG_FORMAT=json)
+# are parsed and their fields become Loki labels you can filter on.
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      # Container name → `container` label (without docker's leading slash).
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+      # Compose service name from labels (set by docker compose).
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: 'service'
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: 'stream'
+    pipeline_stages:
+      # Try to parse JSON; if it fails (e.g. nginx access log), the line
+      # passes through as-is.
+      - json:
+          expressions:
+            level: level
+            trace_id: trace_id
+            target: target
+      - labels:
+          level:
+          trace_id:

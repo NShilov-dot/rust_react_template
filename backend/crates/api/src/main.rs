@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
-
 use application::auth::{
     login::Login, logout::Logout, refresh::Refresh, register::Register,
 };
@@ -19,6 +17,7 @@ mod extractors;
 mod handlers;
 mod routes;
 mod state;
+mod telemetry;
 
 use state::AppState;
 
@@ -26,10 +25,7 @@ use state::AppState;
 async fn main() -> anyhow::Result<()> {
     let config = Config::from_env()?;
 
-    tracing_subscriber::registry()
-        .with(EnvFilter::try_new(&config.log_level).unwrap_or_else(|_| EnvFilter::new("info")))
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    let telemetry_guard = telemetry::init(&config.log_level)?;
 
     tracing::info!("connecting to postgres");
     let pool = postgres::connect(&config.database_url, config.db_max_connections).await?;
@@ -80,6 +76,10 @@ async fn main() -> anyhow::Result<()> {
     )
     .with_graceful_shutdown(shutdown_signal())
     .await?;
+
+    // Flush any in-flight spans to the OTLP collector before the process
+    // exits. No-op when OTLP is disabled.
+    telemetry_guard.shutdown();
 
     Ok(())
 }

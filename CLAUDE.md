@@ -33,6 +33,16 @@ make health        # curl :5173/api/health (through edge)
 make health-direct # curl :8080/health (direct)
 ```
 
+### Observability overlay (optional)
+
+```bash
+make obs-up-d      # full stack + grafana/prometheus/tempo/loki/promtail/otel-collector
+make obs-grafana   # opens http://localhost:3000
+make obs-logs      # tail logs from the observability services only
+make obs-down      # stop everything (keeps volumes)
+make obs-nuke      # stop AND wipe Prom/Tempo/Loki/Grafana data
+```
+
 `make up` requires **two** .env files (`make env` creates both if missing):
 - root `.env` — read by `docker compose` for variable substitution (`JWT_SECRET` etc.).
 - `backend/.env` — only used by `cargo run` on the host; has `DATABASE_URL=localhost`.
@@ -129,7 +139,19 @@ Five services in `docker-compose.yml`: `postgres`, `redis`, `backend`, `frontend
 
 ## Endpoints (backend)
 
-Public: `GET /health`, `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`.
+Public: `GET /health`, `GET /metrics`, `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`.
 Protected (`Authorization: Bearer <access>`): `GET /auth/me`, `GET /users?limit=&offset=`, `GET /users/{id}`.
 
 `/auth/me` and `/users/{id}` are Redis-cached.
+
+`/metrics` exposes Prometheus format — RED metrics (`axum_http_requests_*`) and business counters (`auth_attempts_total{endpoint,outcome}`). Internal-only in spirit; nginx happens to pass it through `/api/metrics`, which is fine for local dev. For production you'd want a deny rule in `nginx/nginx.conf` or a separate metrics port.
+
+## Observability
+
+The app is instrumented; the backend stack is an **optional overlay** so day-to-day dev is lean.
+
+- **Three signals on the app side:** Prometheus metrics on `:8080/metrics`, OTLP traces shipped to `OTEL_EXPORTER_OTLP_ENDPOINT` when set, and stdout logs that switch to JSON when `LOG_FORMAT=json`. All three layers wired in `api/src/telemetry.rs` — single `telemetry::init()` call in `main.rs` (plus a `Drop`/`shutdown` on exit for OTLP flushing).
+- **Tracing pipeline order:** EnvFilter → stdout (pretty/JSON) → tracing-opentelemetry (OTLP). HTTP RED metrics are auto-emitted by an `axum-prometheus` Tower layer; business counters use the `metrics::counter!` macro (kept low-cardinality — one `endpoint` × one `outcome` label = ≤ 8 series).
+- **Observability stack** lives in `observability/` (otel-collector, prometheus, tempo, loki, promtail, grafana — each with its own config file) and is launched via `docker-compose.observability.yml` overlay. Grafana is provisioned with Prom/Tempo/Loki datasources and one starter dashboard (`grafana/dashboards/backend-red.json`).
+- **Commands**: `make obs-up-d` (or `obs-up` to follow logs) brings everything up. `make obs-grafana` opens Grafana at `http://localhost:3000` (admin/admin, or anonymous Viewer). `make obs-nuke` wipes Prom/Tempo/Loki/Grafana volumes.
+- **Trace ↔ logs correlation**: Grafana's Tempo datasource is wired so that clicking a span jumps to Loki logs for the same `trace_id`. The JSON formatter on the app side includes `trace_id` when a span is active.

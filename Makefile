@@ -1,5 +1,10 @@
 COMPOSE := docker compose
 
+# Observability overlay — adds Prom/Tempo/Loki/Grafana/Promtail/otel-collector
+# on top of the main stack and injects LOG_FORMAT=json + OTEL endpoint into
+# the backend. Use the obs-* targets, not OBS_COMPOSE directly.
+OBS_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.observability.yml
+
 # Cargo commands run against the backend workspace from the repo root.
 CARGO := cargo --manifest-path backend/Cargo.toml
 
@@ -87,6 +92,31 @@ rebuild-clean: env ## Rebuild backend with --no-cache, then bring the whole stac
 .PHONY: deps-up
 deps-up: env ## Start only Postgres + Redis (for `make run` on host)
 	$(COMPOSE) up -d postgres redis
+
+# ─── Observability overlay ────────────────────────────────────────
+.PHONY: obs-up
+obs-up: env ## Start full stack + observability (Grafana, Prom, Tempo, Loki, Promtail, otel-collector), follow logs
+	$(OBS_COMPOSE) up --build
+
+.PHONY: obs-up-d
+obs-up-d: env ## Start full stack + observability, detached
+	$(OBS_COMPOSE) up -d --build
+
+.PHONY: obs-down
+obs-down: ## Stop observability + app stack (keep volumes)
+	$(OBS_COMPOSE) down
+
+.PHONY: obs-nuke
+obs-nuke: ## Stop AND wipe observability volumes (Prom data, Grafana, Tempo, Loki)
+	$(OBS_COMPOSE) down -v
+
+.PHONY: obs-logs
+obs-logs: ## Tail logs from all observability services
+	$(OBS_COMPOSE) logs -f otel-collector prometheus tempo loki promtail grafana
+
+.PHONY: obs-grafana
+obs-grafana: ## Open Grafana in the browser (http://localhost:3000)
+	@open http://localhost:3000 2>/dev/null || xdg-open http://localhost:3000 2>/dev/null || echo "Open http://localhost:3000 (admin/admin or anonymous viewer)"
 
 # ─── Database access ──────────────────────────────────────────────
 .PHONY: psql

@@ -57,9 +57,21 @@ anyhow = "1"
 # Async traits
 async-trait = "0.1"
 
-# Logging
+# Logging / observability
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-opentelemetry = "0.27"
+opentelemetry = "0.26"
+opentelemetry_sdk = { version = "0.26", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.26", features = ["grpc-tonic"] }
+# `semconv_experimental` is needed for stable names like DEPLOYMENT_ENVIRONMENT_NAME
+# (otel keeps moving these between "stable" and "experimental" between releases).
+opentelemetry-semantic-conventions = { version = "0.26", features = ["semconv_experimental"] }
+
+# Metrics
+metrics = "0.23"
+metrics-exporter-prometheus = { version = "0.15", default-features = false }
+axum-prometheus = "0.7"
 
 # Config
 dotenvy = "0.15"

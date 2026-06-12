@@ -1,0 +1,65 @@
+# OpenTelemetry Collector — accepts OTLP traces from the backend (gRPC/4317
+# and HTTP/4318) and forwards them to Tempo. Self-telemetry is exposed at
+# :8888 so Prometheus can scrape collector health metrics.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Batching cuts the per-export overhead and is recommended for any
+  # production pipeline. Numbers are conservative for a small auth app.
+  batch:
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+    timeout: 5s
+  # Stamp every span with a namespace so Grafana queries can scope to
+  # this app cleanly if other apps share the same backend later.
+  resource:
+    attributes:
+      - key: service.namespace
+        value: rust-react
+        action: upsert
+  # Drop traces older than 30s — protects against catastrophic loops
+  # where the app re-emits old data on retry.
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 75
+    spike_limit_percentage: 25
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+    sending_queue:
+      enabled: true
+      queue_size: 5000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+
+  # Debug exporter — handy for "is the collector receiving anything?" smoke.
+  # Switch loglevel to "detailed" if you need to see span bodies.
+  debug:
+    verbosity: basic
+
+service:
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp/tempo, debug]

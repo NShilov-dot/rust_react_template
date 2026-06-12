@@ -76,6 +76,18 @@ fn ttl_to_secs(tp: &TokenPair) -> i64 {
     (tp.refresh_expires_at - Utc::now()).num_seconds().max(0)
 }
 
+// ─── Metrics helper ──────────────────────────────────────────────────
+//
+// Single counter `auth_attempts_total` with two labels: `endpoint`
+// (register|login|refresh|logout) and `outcome` (success|failure). That's
+// at most 8 series total — safely below any Prom cardinality budget.
+// We deliberately do NOT label by error variant or user-id (cardinality
+// explosion risk).
+fn record(endpoint: &'static str, outcome: &'static str) {
+    metrics::counter!("auth_attempts_total", "endpoint" => endpoint, "outcome" => outcome)
+        .increment(1);
+}
+
 // ─── Handlers ────────────────────────────────────────────────────────
 
 pub async fn register(
@@ -90,7 +102,9 @@ pub async fn register(
             name: body.name,
             password: body.password,
         })
-        .await?;
+        .await
+        .inspect_err(|_| record("register", "failure"))?;
+    record("register", "success");
 
     let max_age = ttl_to_secs(&out.tokens);
     let jar = jar.add(refresh_cookie(out.tokens.refresh_token, max_age));
@@ -119,7 +133,9 @@ pub async fn login(
             email: body.email,
             password: body.password,
         })
-        .await?;
+        .await
+        .inspect_err(|_| record("login", "failure"))?;
+    record("login", "success");
 
     let max_age = ttl_to_secs(&out.tokens);
     let jar = jar.add(refresh_cookie(out.tokens.refresh_token, max_age));
@@ -141,14 +157,19 @@ pub async fn refresh(
     let presented = jar
         .get(REFRESH_COOKIE)
         .map(|c| c.value().to_string())
-        .ok_or(ApiError::Unauthorized)?;
+        .ok_or_else(|| {
+            record("refresh", "failure");
+            ApiError::Unauthorized
+        })?;
 
     let tokens = state
         .refresh
         .execute(RefreshInput {
             refresh_token: presented,
         })
-        .await?;
+        .await
+        .inspect_err(|_| record("refresh", "failure"))?;
+    record("refresh", "success");
 
     let max_age = ttl_to_secs(&tokens);
     let jar = jar.add(refresh_cookie(tokens.refresh_token, max_age));
@@ -175,6 +196,9 @@ pub async fn logout(
             })
             .await;
     }
+    // Always count as success — logout is idempotent and we always clear
+    // the cookie regardless of whether the revoke call worked.
+    record("logout", "success");
     let jar = jar.add(clear_refresh_cookie());
     Ok((jar, StatusCode::NO_CONTENT))
 }

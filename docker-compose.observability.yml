@@ -1,0 +1,119 @@
+# Observability overlay — start with:
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+# or:
+#   make obs-up-d
+#
+# When merged with the main compose:
+# - backend gets OTEL_EXPORTER_OTLP_ENDPOINT + LOG_FORMAT=json so it ships
+#   traces to the collector and emits JSON logs (Promtail picks them up).
+# - Six observability services run alongside the app: otel-collector,
+#   prometheus, tempo, loki, promtail, grafana.
+
+services:
+  backend:
+    environment:
+      # Merged with the values in docker-compose.yml — these new keys are
+      # additive (docker compose deep-merges service environment maps).
+      LOG_FORMAT: json
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: api
+      ENVIRONMENT: dev
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    command: ["--config=/etc/otel-collector/config.yaml"]
+    volumes:
+      - ./observability/otel-collector/config.yaml:/etc/otel-collector/config.yaml:ro
+    # 4317 OTLP gRPC, 4318 OTLP HTTP, 8888 collector self-metrics.
+    expose:
+      - "4317"
+      - "4318"
+      - "8888"
+    depends_on:
+      tempo:
+        condition: service_started
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom_data:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.6.0
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    # 3200 HTTP query API, 4317 OTLP gRPC ingest (used internally by the
+    # collector, not exposed to the host).
+    expose:
+      - "3200"
+      - "4317"
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.2.0
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./observability/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki_data:/loki
+    expose:
+      - "3100"
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.2.0
+    command: ["-config.file=/etc/promtail/promtail.yaml"]
+    volumes:
+      - ./observability/promtail/promtail.yaml:/etc/promtail/promtail.yaml:ro
+      # Read-only socket — discovers docker containers + tails their logs.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail_data:/tmp
+    depends_on:
+      loki:
+        condition: service_started
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_DEFAULT_THEME: dark
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  prom_data:
+  tempo_data:
+  loki_data:
+  promtail_data:
+  grafana_data:

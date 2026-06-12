@@ -6,11 +6,13 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use axum_prometheus::PrometheusMetricLayerBuilder;
 use tower_governor::{
     governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
 };
 use tower_http::set_header::SetResponseHeaderLayer;
-use tower_http::trace::TraceLayer;
+use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
+use tracing::Level;
 
 use crate::handlers;
 use crate::state::AppState;
@@ -62,9 +64,25 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/refresh", post(handlers::auth::refresh))
         .layer(GovernorLayer::new(refresh_rl));
 
+    // ─── Prometheus RED metrics ───────────────────────────────────────
+    // The layer auto-instruments every request: emits
+    //   axum_http_requests_total{method,endpoint,status}
+    //   axum_http_requests_duration_seconds_bucket{le,...}
+    //   axum_http_requests_pending{method,endpoint}
+    // The handle is what /metrics queries to render the Prom text.
+    // `with_ignore_pattern` keeps the scrape itself out of its own metrics.
+    let (prom_layer, prom_handle) = PrometheusMetricLayerBuilder::new()
+        .with_ignore_patterns(&["/metrics", "/health"])
+        .with_default_metrics()
+        .build_pair();
+
     // ─── Routes without rate limit ─────────────────────────────────────
     let unlimited = Router::new()
         .route("/health", get(handlers::health::health))
+        .route(
+            "/metrics",
+            get(move || std::future::ready(prom_handle.render())),
+        )
         .route("/auth/logout", post(handlers::auth::logout))
         .route("/auth/me", get(handlers::auth::me))
         .route("/users", get(handlers::users::list))
@@ -83,6 +101,16 @@ pub fn router(state: AppState) -> Router {
             header::X_CONTENT_TYPE_OPTIONS,
             HeaderValue::from_static("nosniff"),
         ))
-        .layer(TraceLayer::new_for_http())
+        // Order matters: TraceLayer outermost so spans cover the whole
+        // request including the prometheus layer's overhead.
+        .layer(prom_layer)
+        // INFO-level spans (default would be DEBUG) so they survive a
+        // production-grade `RUST_LOG=info` filter and reach the OTLP
+        // exporter for trace export.
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+                .on_response(DefaultOnResponse::new().level(Level::INFO)),
+        )
         .with_state(state)
 }

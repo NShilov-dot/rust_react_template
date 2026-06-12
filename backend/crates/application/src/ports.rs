@@ -2,6 +2,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
+use uuid::Uuid;
+
 use domain::{Email, PasswordHash, Task, TaskId, TaskStatus, User, UserId};
 
 // ─── Repository ──────────────────────────────────────────────────────────
@@ -42,11 +44,17 @@ pub trait UserRepository: Send + Sync {
 
 /// Filters for `TaskRepository::list_for_owner`. All filters compose with
 /// the implicit `owner_id = $1` predicate enforced at the SQL level.
+///
+/// `cursor` is the `(created_at, id)` of the last item from the previous
+/// page — `None` means "give me the first page". The repository implements
+/// keyset pagination (`WHERE (created_at, id) < cursor`), so latency is
+/// constant regardless of how deep into the list we scroll. Offset-based
+/// pagination would slow down quadratically.
 #[derive(Debug, Default, Clone)]
 pub struct TaskListFilter {
     pub status: Option<TaskStatus>,
+    pub cursor: Option<(DateTime<Utc>, Uuid)>,
     pub limit: i64,
-    pub offset: i64,
 }
 
 #[async_trait]

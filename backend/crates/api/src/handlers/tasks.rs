@@ -3,6 +3,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -45,6 +46,14 @@ impl From<Task> for TaskResponse {
     }
 }
 
+#[derive(Debug, Serialize)]
+pub struct TaskListResponse {
+    pub tasks: Vec<TaskResponse>,
+    /// Opaque base64 cursor for the next page, or `null` when this was the
+    /// last page. Format is private to the server; the client just round-trips it.
+    pub next_cursor: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateTaskRequest {
     pub title: String,
@@ -78,8 +87,37 @@ pub struct ListQuery {
     pub status: Option<TaskStatus>,
     #[serde(default)]
     pub limit: Option<i64>,
+    /// Opaque cursor previously returned as `next_cursor`. Absence = first page.
     #[serde(default)]
-    pub offset: Option<i64>,
+    pub cursor: Option<String>,
+}
+
+// ─── Cursor codec ────────────────────────────────────────────────────
+
+/// Encode `(created_at, id)` as base64url(`<rfc3339>~<uuid>`). The format
+/// is internal — callers must treat it as opaque. We base64-encode so the
+/// URL stays clean and so a future format change doesn't break clients
+/// that pass cursors back verbatim.
+fn encode_cursor(ts: DateTime<Utc>, id: Uuid) -> String {
+    let raw = format!("{}~{}", ts.to_rfc3339(), id);
+    URL_SAFE_NO_PAD.encode(raw.as_bytes())
+}
+
+fn decode_cursor(s: &str) -> Result<(DateTime<Utc>, Uuid), ApiError> {
+    let bytes = URL_SAFE_NO_PAD
+        .decode(s)
+        .map_err(|_| ApiError::BadRequest("invalid cursor".into()))?;
+    let raw = std::str::from_utf8(&bytes)
+        .map_err(|_| ApiError::BadRequest("invalid cursor".into()))?;
+    let (ts_part, id_part) = raw
+        .split_once('~')
+        .ok_or_else(|| ApiError::BadRequest("invalid cursor".into()))?;
+    let ts = DateTime::parse_from_rfc3339(ts_part)
+        .map_err(|_| ApiError::BadRequest("invalid cursor".into()))?
+        .with_timezone(&Utc);
+    let id = Uuid::parse_str(id_part)
+        .map_err(|_| ApiError::BadRequest("invalid cursor".into()))?;
+    Ok((ts, id))
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────
@@ -106,17 +144,26 @@ pub async fn list(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
     Query(q): Query<ListQuery>,
-) -> Result<Json<Vec<TaskResponse>>, ApiError> {
-    let tasks = state
+) -> Result<Json<TaskListResponse>, ApiError> {
+    let cursor = match q.cursor.as_deref().filter(|s| !s.is_empty()) {
+        Some(s) => Some(decode_cursor(s)?),
+        None => None,
+    };
+
+    let out = state
         .list_tasks
         .execute(ListTasksInput {
             owner_id: user_id,
             status: q.status,
+            cursor,
             limit: q.limit,
-            offset: q.offset,
         })
         .await?;
-    Ok(Json(tasks.into_iter().map(Into::into).collect()))
+
+    Ok(Json(TaskListResponse {
+        tasks: out.tasks.into_iter().map(Into::into).collect(),
+        next_cursor: out.next_cursor.map(|(ts, id)| encode_cursor(ts, id)),
+    }))
 }
 
 pub async fn get(

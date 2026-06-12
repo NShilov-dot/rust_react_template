@@ -28,3 +28,10 @@ export interface UpdateTaskBody {
   priority?: TaskPriority;
   due_date?: string;
 }
+
+/** Response shape from `GET /tasks` — one page of cursor-based pagination. */
+export interface TasksPage {
+  tasks: Task[];
+  /** Opaque cursor for the next page; `null` when this is the last page. */
+  next_cursor: string | null;
+}

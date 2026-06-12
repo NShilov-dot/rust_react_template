@@ -125,41 +125,85 @@ impl TaskRepository for PgTaskRepository {
         owner_id: UserId,
         filter: TaskListFilter,
     ) -> Result<Vec<Task>, RepoError> {
-        // One query per branch so Postgres can pick a planner that uses the
-        // composite index on (owner_id, status, created_at DESC) either way.
-        let rows: Vec<TaskRow> = if let Some(status) = filter.status {
-            sqlx::query_as(
-                r#"
-                SELECT id, owner_id, title, description, status, priority,
-                       due_date, created_at, updated_at
-                FROM tasks
-                WHERE owner_id = $1 AND status = $2
-                ORDER BY created_at DESC
-                LIMIT $3 OFFSET $4
-                "#,
-            )
-            .bind(owner_id.0)
-            .bind(status.as_str())
-            .bind(filter.limit)
-            .bind(filter.offset)
-            .fetch_all(&self.pool)
-            .await
-        } else {
-            sqlx::query_as(
+        // Keyset pagination: `(created_at, id) < ($cursor_ts, $cursor_id)`
+        // gives stable ordering even if rows are inserted between page loads.
+        // Postgres natively supports tuple comparison; the composite index on
+        // (owner_id, status, created_at DESC) covers the bulk of each variant.
+        // The `id DESC` secondary sort is a tiebreaker — collisions on
+        // `created_at` are extremely rare with TIMESTAMPTZ microseconds.
+        //
+        // Four SQL variants for the four combinations of (status filter, cursor)
+        // so the planner can pick the right index every time. The cost of
+        // duplication is small and beats a single string-formatted query.
+        let rows: Vec<TaskRow> = match (filter.status, filter.cursor) {
+            (Some(status), Some((cur_ts, cur_id))) => sqlx::query_as(
                 r#"
                 SELECT id, owner_id, title, description, status, priority,
                        due_date, created_at, updated_at
                 FROM tasks
                 WHERE owner_id = $1
-                ORDER BY created_at DESC
-                LIMIT $2 OFFSET $3
+                  AND status = $2
+                  AND (created_at, id) < ($3, $4)
+                ORDER BY created_at DESC, id DESC
+                LIMIT $5
+                "#,
+            )
+            .bind(owner_id.0)
+            .bind(status.as_str())
+            .bind(cur_ts)
+            .bind(cur_id)
+            .bind(filter.limit)
+            .fetch_all(&self.pool)
+            .await,
+
+            (Some(status), None) => sqlx::query_as(
+                r#"
+                SELECT id, owner_id, title, description, status, priority,
+                       due_date, created_at, updated_at
+                FROM tasks
+                WHERE owner_id = $1 AND status = $2
+                ORDER BY created_at DESC, id DESC
+                LIMIT $3
+                "#,
+            )
+            .bind(owner_id.0)
+            .bind(status.as_str())
+            .bind(filter.limit)
+            .fetch_all(&self.pool)
+            .await,
+
+            (None, Some((cur_ts, cur_id))) => sqlx::query_as(
+                r#"
+                SELECT id, owner_id, title, description, status, priority,
+                       due_date, created_at, updated_at
+                FROM tasks
+                WHERE owner_id = $1
+                  AND (created_at, id) < ($2, $3)
+                ORDER BY created_at DESC, id DESC
+                LIMIT $4
+                "#,
+            )
+            .bind(owner_id.0)
+            .bind(cur_ts)
+            .bind(cur_id)
+            .bind(filter.limit)
+            .fetch_all(&self.pool)
+            .await,
+
+            (None, None) => sqlx::query_as(
+                r#"
+                SELECT id, owner_id, title, description, status, priority,
+                       due_date, created_at, updated_at
+                FROM tasks
+                WHERE owner_id = $1
+                ORDER BY created_at DESC, id DESC
+                LIMIT $2
                 "#,
             )
             .bind(owner_id.0)
             .bind(filter.limit)
-            .bind(filter.offset)
             .fetch_all(&self.pool)
-            .await
+            .await,
         }
         .map_err(map_sqlx)?;
         rows.into_iter().map(Task::try_from).collect()

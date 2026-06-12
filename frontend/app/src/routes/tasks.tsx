@@ -13,6 +13,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { Virtuoso } from 'react-virtuoso';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
@@ -29,9 +30,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { Task, TaskPriority, TaskStatus } from '@/types/tasks';
 
-/** Shared auto-animate timing — tight enough to feel responsive, slow enough
- *  to feel intentional. `respectMotionPreference: true` is the default (skips
- *  animation when prefers-reduced-motion is set). */
+/** Shared auto-animate timing. `respectMotionPreference` is default-on. */
 const ANIMATE_OPTS = { duration: 180, easing: 'ease-out' } as const;
 
 // ─── Labels & visual mappings ──────────────────────────────────────────
@@ -85,8 +84,6 @@ type EditValues = z.infer<typeof editSchema>;
 
 function dueDateToIso(yyyyMmDd: string | undefined | null): string | undefined {
   if (!yyyyMmDd) return undefined;
-  // `<input type="date">` returns local-tz YYYY-MM-DD. Treat it as end-of-day
-  // in the user's tz so "today" stays "today" when they open the page later.
   const d = new Date(`${yyyyMmDd}T23:59:59`);
   if (Number.isNaN(d.getTime())) return undefined;
   return d.toISOString();
@@ -96,7 +93,6 @@ function isoToDateInput(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  // Convert back to local-tz YYYY-MM-DD for the date input.
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
@@ -115,21 +111,19 @@ export default function TasksPage() {
 
   const tasksQuery = useTasks(filter === 'all' ? {} : { status: filter });
 
-  const counts = useMemo(() => {
-    const data = tasksQuery.data ?? [];
-    return {
-      all: data.length,
-      todo: data.filter((t) => t.status === 'todo').length,
-      in_progress: data.filter((t) => t.status === 'in_progress').length,
-      done: data.filter((t) => t.status === 'done').length,
-    };
-  }, [tasksQuery.data]);
+  // Flatten loaded pages into one array. The `useMemo` keeps a stable
+  // reference between renders so Virtuoso doesn't fully re-render the list
+  // on every parent re-render.
+  const tasks = useMemo(
+    () => tasksQuery.data?.pages.flatMap((p) => p.tasks) ?? [],
+    [tasksQuery.data],
+  );
 
-  // Animates the create-form expand/collapse and the swap between
-  // skeleton / empty / card list. auto-animate respects
-  // `prefers-reduced-motion` by default — no extra checks needed.
+  // Only the composer (create-form expand/collapse) uses auto-animate.
+  // The task list is virtualized by Virtuoso, which recycles DOM nodes
+  // as the user scrolls — putting auto-animate on a virtualized list
+  // would trigger animations on row recycling.
   const [composerRef] = useAutoAnimate<HTMLDivElement>(ANIMATE_OPTS);
-  const [listRef] = useAutoAnimate<HTMLElement>(ANIMATE_OPTS);
 
   return (
     <div className="space-y-6">
@@ -163,23 +157,20 @@ export default function TasksPage() {
         {showCreate && <CreateTaskForm onDone={() => setShowCreate(false)} />}
       </div>
 
-      <FilterTabs current={filter} onChange={setFilter} totals={counts} />
+      <FilterTabs current={filter} onChange={setFilter} />
 
-      <section ref={listRef} aria-label="Список задач" className="space-y-3">
-        {tasksQuery.isPending && <TaskListSkeleton />}
-
-        {tasksQuery.isError && (
-          <Card className="p-6">
-            <p className="text-sm text-destructive" role="alert">
-              Не удалось загрузить задачи
-            </p>
-          </Card>
-        )}
-
-        {tasksQuery.data && tasksQuery.data.length === 0 && <EmptyState />}
-
-        {tasksQuery.data?.map((task) => <TaskCard key={task.id} task={task} />)}
-      </section>
+      <TaskList
+        tasks={tasks}
+        isPending={tasksQuery.isPending}
+        isError={tasksQuery.isError}
+        hasNextPage={tasksQuery.hasNextPage}
+        isFetchingNextPage={tasksQuery.isFetchingNextPage}
+        onEndReached={() => {
+          if (tasksQuery.hasNextPage && !tasksQuery.isFetchingNextPage) {
+            void tasksQuery.fetchNextPage();
+          }
+        }}
+      />
     </div>
   );
 }
@@ -189,11 +180,9 @@ export default function TasksPage() {
 function FilterTabs({
   current,
   onChange,
-  totals,
 }: {
   current: TaskStatus | 'all';
   onChange: (s: TaskStatus | 'all') => void;
-  totals: { all: number; todo: number; in_progress: number; done: number };
 }) {
   return (
     <div
@@ -203,7 +192,6 @@ function FilterTabs({
     >
       {STATUS_FILTERS.map((f) => {
         const active = current === f.value;
-        const count = totals[f.value];
         return (
           <button
             key={f.value}
@@ -211,7 +199,7 @@ function FilterTabs({
             aria-selected={active}
             onClick={() => onChange(f.value)}
             className={cn(
-              'inline-flex h-8 items-center gap-2 rounded-md px-3 text-sm font-medium transition-colors',
+              'inline-flex h-8 items-center rounded-md px-3 text-sm font-medium transition-colors',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               active
                 ? 'bg-secondary text-secondary-foreground'
@@ -219,18 +207,91 @@ function FilterTabs({
             )}
           >
             {f.label}
-            <span
-              className={cn(
-                'inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-xs',
-                active ? 'bg-background/60' : 'bg-muted',
-              )}
-            >
-              {count}
-            </span>
           </button>
         );
       })}
     </div>
+  );
+}
+
+// ─── Virtualized list ──────────────────────────────────────────────────
+
+function TaskList({
+  tasks,
+  isPending,
+  isError,
+  hasNextPage,
+  isFetchingNextPage,
+  onEndReached,
+}: {
+  tasks: Task[];
+  isPending: boolean;
+  isError: boolean;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  onEndReached: () => void;
+}) {
+  if (isPending) return <TaskListSkeleton />;
+
+  if (isError) {
+    return (
+      <Card className="p-6">
+        <p className="text-sm text-destructive" role="alert">
+          Не удалось загрузить задачи
+        </p>
+      </Card>
+    );
+  }
+
+  if (tasks.length === 0) return <EmptyState />;
+
+  return (
+    <section aria-label="Список задач">
+      <Virtuoso
+        // `useWindowScroll` makes Virtuoso piggyback on the page's normal
+        // scroll instead of needing a fixed-height container — keeps the
+        // layout simple and the header/filter accessible while scrolling.
+        useWindowScroll
+        data={tasks}
+        // Stable keys so React (and the virtualizer) reuse rows when the
+        // underlying array changes order. Optimistic-temp rows are swapped
+        // for their real twins on success, which is one row change, not a
+        // whole-list re-mount.
+        computeItemKey={(_, task) => task.id}
+        itemContent={(_, task) => (
+          <div className="pb-3">
+            <TaskCard task={task} />
+          </div>
+        )}
+        // 600 px overscan keeps two screens of cards rendered above/below
+        // the viewport — smooth scrolling, modest memory.
+        overscan={600}
+        endReached={onEndReached}
+        increaseViewportBy={300}
+        components={{
+          Footer: () =>
+            hasNextPage ? (
+              <div
+                className="flex items-center justify-center py-4 text-sm text-muted-foreground"
+                role="status"
+              >
+                <Loader2
+                  className={cn(
+                    'mr-2 h-4 w-4',
+                    isFetchingNextPage && 'animate-spin',
+                  )}
+                  aria-hidden="true"
+                />
+                {isFetchingNextPage ? 'Загружаем…' : 'Прокрутите вниз'}
+              </div>
+            ) : (
+              <div className="py-4 text-center text-xs text-muted-foreground">
+                Это все задачи
+              </div>
+            ),
+        }}
+      />
+    </section>
   );
 }
 
@@ -354,8 +415,8 @@ function TaskCard({ task }: { task: Task }) {
   const update = useUpdateTask();
   const del = useDeleteTask();
 
-  // Temporary IDs (from optimistic create) can't yet be mutated server-side —
-  // disable controls until the real ID arrives after the next refetch.
+  // Temp rows (from optimistic create) have a synthetic id and can't be
+  // mutated on the server yet. Lock controls until the real id arrives.
   const isTemp = task.id.startsWith('temp-');
 
   const onStatusChange = (status: TaskStatus) => {

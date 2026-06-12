@@ -5,14 +5,20 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 use application::auth::{
     google::GoogleAuth, login::Login, logout::Logout, refresh::Refresh, register::Register,
 };
-use application::ports::{GoogleAuthClient, PasswordHasher, SessionManager, UserRepository};
+use application::ports::{
+    GoogleAuthClient, PasswordHasher, SessionManager, TaskRepository, UserRepository,
+};
+use application::tasks::{
+    create_task::CreateTask, delete_task::DeleteTask, get_task::GetTask, list_tasks::ListTasks,
+    update_task::UpdateTask,
+};
 use application::users::{get_user::GetUser, list_users::ListUsers};
 use infrastructure::{
     auth::{Argon2Hasher, RedisJwtSessions, SessionConfig},
     cache::RedisCache,
     config::Config,
     oauth::GoogleOAuthClient,
-    postgres::{self, user_repository::PgUserRepository},
+    postgres::{self, task_repository::PgTaskRepository, user_repository::PgUserRepository},
 };
 
 mod error;
@@ -55,7 +61,8 @@ async fn main() -> anyhow::Result<()> {
         },
     )?);
 
-    let user_repo: Arc<dyn UserRepository> = Arc::new(PgUserRepository::new(pool));
+    let user_repo: Arc<dyn UserRepository> = Arc::new(PgUserRepository::new(pool.clone()));
+    let task_repo: Arc<dyn TaskRepository> = Arc::new(PgTaskRepository::new(pool));
     let hasher: Arc<dyn PasswordHasher> = Arc::new(Argon2Hasher::new());
 
     let (google_auth, google_post_login_redirect, google_error_redirect) = match config.google {
@@ -91,6 +98,11 @@ async fn main() -> anyhow::Result<()> {
         logout: Arc::new(Logout::new(sessions.clone())),
         get_user: Arc::new(GetUser::new(user_repo.clone(), cache.clone())),
         list_users: Arc::new(ListUsers::new(user_repo.clone())),
+        create_task: Arc::new(CreateTask::new(task_repo.clone())),
+        list_tasks: Arc::new(ListTasks::new(task_repo.clone())),
+        get_task: Arc::new(GetTask::new(task_repo.clone())),
+        update_task: Arc::new(UpdateTask::new(task_repo.clone())),
+        delete_task: Arc::new(DeleteTask::new(task_repo.clone())),
         sessions,
         google_auth,
         google_post_login_redirect,

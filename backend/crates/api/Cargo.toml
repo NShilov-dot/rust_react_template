@@ -17,6 +17,9 @@ infrastructure = { workspace = true }
 axum = { workspace = true }
 axum-extra = { workspace = true }
 cookie = { workspace = true }
+# Direct dep so the workspace `=0.3.36` pin actually binds the resolver
+# for the cookie/time interaction (see comment in workspace Cargo.toml).
+time = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }

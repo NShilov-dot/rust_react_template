@@ -84,7 +84,17 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/logout", post(handlers::auth::logout))
         .route("/auth/me", get(handlers::auth::me))
         .route("/users", get(handlers::users::list))
-        .route("/users/{id}", get(handlers::users::get));
+        .route("/users/{id}", get(handlers::users::get))
+        .route(
+            "/tasks",
+            get(handlers::tasks::list).post(handlers::tasks::create),
+        )
+        .route(
+            "/tasks/{id}",
+            get(handlers::tasks::get)
+                .patch(handlers::tasks::update)
+                .delete(handlers::tasks::delete),
+        );
 
     Router::new()
         .merge(login)

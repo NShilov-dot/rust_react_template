@@ -3,9 +3,11 @@
 
 pub mod auth;
 pub mod ports;
+pub mod tasks;
 pub mod users;
 
 pub use ports::{
     AuthRequest, CacheError, CacheStore, GoogleAuthClient, GoogleUserInfo, HasherError, OAuthError,
-    PasswordHasher, RepoError, SessionError, SessionManager, TokenPair, UserRepository,
+    PasswordHasher, RepoError, SessionError, SessionManager, TaskListFilter, TaskRepository,
+    TokenPair, UserRepository,
 };

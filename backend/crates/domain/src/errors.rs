@@ -8,4 +8,12 @@ pub enum DomainError {
     InvalidName(String),
     #[error("weak password: {0}")]
     WeakPassword(String),
+    #[error("invalid task title: {0}")]
+    InvalidTaskTitle(String),
+    #[error("invalid task description: {0}")]
+    InvalidTaskDescription(String),
+    #[error("invalid task status: {0}")]
+    InvalidTaskStatus(String),
+    #[error("invalid task priority: {0}")]
+    InvalidTaskPriority(String),
 }

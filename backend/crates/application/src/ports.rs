@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
-use domain::{Email, PasswordHash, User, UserId};
+use domain::{Email, PasswordHash, Task, TaskId, TaskStatus, User, UserId};
 
 // ─── Repository ──────────────────────────────────────────────────────────
 
@@ -36,6 +36,41 @@ pub trait UserRepository: Send + Sync {
         email: &Email,
     ) -> Result<Option<(User, PasswordHash)>, RepoError>;
     async fn list(&self, limit: i64, offset: i64) -> Result<Vec<User>, RepoError>;
+}
+
+// ─── Task repository ─────────────────────────────────────────────────────
+
+/// Filters for `TaskRepository::list_for_owner`. All filters compose with
+/// the implicit `owner_id = $1` predicate enforced at the SQL level.
+#[derive(Debug, Default, Clone)]
+pub struct TaskListFilter {
+    pub status: Option<TaskStatus>,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[async_trait]
+pub trait TaskRepository: Send + Sync {
+    async fn create(&self, task: &Task) -> Result<(), RepoError>;
+    /// Returns the task only if it belongs to `owner_id` — keeps IDOR out
+    /// of the handler's responsibility.
+    async fn find_for_owner(
+        &self,
+        id: TaskId,
+        owner_id: UserId,
+    ) -> Result<Option<Task>, RepoError>;
+    async fn list_for_owner(
+        &self,
+        owner_id: UserId,
+        filter: TaskListFilter,
+    ) -> Result<Vec<Task>, RepoError>;
+    /// Persists every mutable field. The caller is responsible for having
+    /// loaded the task via `find_for_owner` first, so the `owner_id`
+    /// check has already been done.
+    async fn update(&self, task: &Task) -> Result<(), RepoError>;
+    /// Deletes only if the task belongs to `owner_id`. Returns `NotFound`
+    /// when the row is absent OR owned by someone else (don't leak which).
+    async fn delete(&self, id: TaskId, owner_id: UserId) -> Result<(), RepoError>;
 }
 
 // ─── Cache ───────────────────────────────────────────────────────────────

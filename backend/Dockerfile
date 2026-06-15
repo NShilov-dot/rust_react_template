@@ -9,7 +9,7 @@
 # ─── Stage 1: chef base ───────────────────────────────────────────────
 # Rust >= 1.88 is required by some transitive deps (time, uuid, idna_adapter
 # which needs edition2024). Bump as needed when bumping the toolchain.
-FROM rust:1.90-slim-bookworm AS chef
+FROM rust:1.96-slim-bookworm AS chef
 WORKDIR /app
 
 # ─── Corporate CA injection (for SSL-inspecting proxies) ──────────────

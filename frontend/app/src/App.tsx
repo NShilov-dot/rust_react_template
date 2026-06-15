@@ -12,6 +12,7 @@ const RegisterPage = lazy(() => import('@/routes/register'));
 const DashboardPage = lazy(() => import('@/routes/dashboard'));
 const ProfilePage = lazy(() => import('@/routes/profile'));
 const UsersPage = lazy(() => import('@/routes/users'));
+const TasksPage = lazy(() => import('@/routes/tasks'));
 
 export function App() {
   useEffect(() => {
@@ -32,6 +33,7 @@ export function App() {
           <Route element={<AppShell />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/tasks" element={<TasksPage />} />
             <Route path="/users" element={<UsersPage />} />
           </Route>
         </Route>

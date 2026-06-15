@@ -8,6 +8,7 @@ use thiserror::Error;
 
 use application::auth::{login::LoginError, register::RegisterError};
 use application::ports::{RepoError, SessionError};
+use application::tasks::TaskError;
 
 #[derive(Debug, Error)]
 pub enum ApiError {
@@ -83,6 +84,15 @@ impl From<LoginError> for ApiError {
             LoginError::Repo(r) => r.into(),
             LoginError::Hasher(_) => Self::Internal,
             LoginError::Session(s) => s.into(),
+        }
+    }
+}
+
+impl From<TaskError> for ApiError {
+    fn from(e: TaskError) -> Self {
+        match e {
+            TaskError::Domain(d) => Self::BadRequest(d.to_string()),
+            TaskError::Repo(r) => r.into(),
         }
     }
 }

@@ -1,15 +1,22 @@
 use std::sync::Arc;
 
 use application::auth::{
-    login::Login, logout::Logout, refresh::Refresh, register::Register,
+    google::GoogleAuth, login::Login, logout::Logout, refresh::Refresh, register::Register,
 };
-use application::ports::{PasswordHasher, SessionManager, UserRepository};
+use application::ports::{
+    GoogleAuthClient, PasswordHasher, SessionManager, TaskRepository, UserRepository,
+};
+use application::tasks::{
+    create_task::CreateTask, delete_task::DeleteTask, get_task::GetTask, list_tasks::ListTasks,
+    update_task::UpdateTask,
+};
 use application::users::{get_user::GetUser, list_users::ListUsers};
 use infrastructure::{
     auth::{Argon2Hasher, RedisJwtSessions, SessionConfig},
     cache::RedisCache,
     config::Config,
-    postgres::{self, user_repository::PgUserRepository},
+    oauth::GoogleOAuthClient,
+    postgres::{self, task_repository::PgTaskRepository, user_repository::PgUserRepository},
 };
 
 mod error;
@@ -50,8 +57,35 @@ async fn main() -> anyhow::Result<()> {
         },
     )?);
 
-    let user_repo: Arc<dyn UserRepository> = Arc::new(PgUserRepository::new(pool));
+    let user_repo: Arc<dyn UserRepository> = Arc::new(PgUserRepository::new(pool.clone()));
+    let task_repo: Arc<dyn TaskRepository> = Arc::new(PgTaskRepository::new(pool));
     let hasher: Arc<dyn PasswordHasher> = Arc::new(Argon2Hasher::new());
+
+    let (google_auth, google_post_login_redirect, google_error_redirect) = match config.google {
+        Some(g) => {
+            tracing::info!("google oauth enabled");
+            let client: Arc<dyn GoogleAuthClient> = Arc::new(GoogleOAuthClient::new(
+                g.client_id,
+                g.client_secret,
+                g.redirect_uri,
+            )?);
+            let use_case = Arc::new(GoogleAuth::new(
+                user_repo.clone(),
+                cache.clone(),
+                client,
+                sessions.clone(),
+            ));
+            (
+                Some(use_case),
+                Some(g.post_login_redirect),
+                Some(g.error_redirect),
+            )
+        }
+        None => {
+            tracing::info!("google oauth disabled (GOOGLE_CLIENT_ID/SECRET not set)");
+            (None, None, None)
+        }
+    };
 
     let state = AppState {
         register: Arc::new(Register::new(user_repo.clone(), hasher.clone(), sessions.clone())),
@@ -60,7 +94,15 @@ async fn main() -> anyhow::Result<()> {
         logout: Arc::new(Logout::new(sessions.clone())),
         get_user: Arc::new(GetUser::new(user_repo.clone(), cache.clone())),
         list_users: Arc::new(ListUsers::new(user_repo.clone())),
+        create_task: Arc::new(CreateTask::new(task_repo.clone())),
+        list_tasks: Arc::new(ListTasks::new(task_repo.clone())),
+        get_task: Arc::new(GetTask::new(task_repo.clone())),
+        update_task: Arc::new(UpdateTask::new(task_repo.clone())),
+        delete_task: Arc::new(DeleteTask::new(task_repo.clone())),
         sessions,
+        google_auth,
+        google_post_login_redirect,
+        google_error_redirect,
     };
 
     let app = routes::router(state);

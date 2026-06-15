@@ -1,0 +1,169 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel in-progress runs for the same ref when a new commit lands —
+# we only care about the latest result on a PR.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Reject network-related flakes faster instead of retrying for minutes.
+  CARGO_NET_RETRY: 2
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  # ─── Backend: Rust workspace ────────────────────────────────────────
+  backend:
+    name: Backend (fmt · clippy · test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      # Postgres + Redis are available locally so any integration test
+      # added later just works. Both services are cheap to spin up.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U app"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://app:app@localhost:5432/app
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # Caches `target/` AND the cargo registry — without it every CI run
+      # re-downloads + recompiles all 300+ deps.
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      # `--locked` fails fast if Cargo.lock is out of sync with Cargo.toml
+      # instead of silently regenerating — exactly what we want in CI.
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace --no-fail-fast --locked
+
+  # ─── Frontend: Vite SPA ─────────────────────────────────────────────
+  frontend:
+    name: Frontend (typecheck · lint · test · build · size)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend/app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/app/package-lock.json
+
+      - name: npm ci
+        run: npm ci
+
+      - name: typecheck
+        run: npm run typecheck
+
+      - name: lint
+        run: npm run lint
+
+      - name: test
+        run: npm run test
+
+      - name: build
+        run: npm run build
+
+      # `size-limit` enforces the per-route + initial-bundle gzip budgets
+      # baked into package.json — guards regressions like an accidental
+      # heavy dep landing in the initial chunk.
+      - name: size budget
+        run: npm run size
+
+  # ─── Docker: end-to-end build verification ──────────────────────────
+  # Catches dep-resolution issues we wouldn't see in `cargo check` alone
+  # (e.g. the cookie/time/Rust 1.90 coherence conflict that bit us).
+  # Doesn't push images — this is a template, consumers fork + publish.
+  docker:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Empty corporate-ca.pem keeps the backend Dockerfile happy in CI —
+      # the file is gitignored locally but the COPY step expects it.
+      - name: Stub corporate CA cert
+        run: |
+          : > backend/corporate-ca.pem
+          : > frontend/app/corporate-ca.pem
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: false
+          load: true
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+          tags: rust_react-backend:ci
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend/app
+          push: false
+          load: true
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+          tags: rust_react-frontend:ci
+
+      - name: Build edge nginx image
+        uses: docker/build-push-action@v6
+        with:
+          context: nginx
+          push: false
+          load: true
+          cache-from: type=gha,scope=nginx
+          cache-to: type=gha,scope=nginx,mode=max
+          tags: rust_react-nginx:ci

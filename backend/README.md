@@ -105,6 +105,8 @@ docker build -t rust-react-backend:dev .
 | POST   | `/auth/login`     | `{ email, password }`                   | Verify creds + Set-Cookie refresh + access|
 | POST   | `/auth/refresh`   | _(cookie)_                              | Rotate refresh in cookie, return new access |
 | POST   | `/auth/logout`    | _(cookie)_                              | Revoke + clear cookie                    |
+| GET    | `/auth/google/start`    |                                   | 302 to Google consent (PKCE+state). 503 if OAuth env not set. |
+| GET    | `/auth/google/callback` | `?code=&state=` or `?error=`      | Exchange code, Set-Cookie refresh, 302 to `/dashboard` (or `/login?oauth_error=<code>`) |
 
 ### Protected — require `Authorization: Bearer <access_token>`
 
@@ -215,6 +217,11 @@ cargo test --workspace
 | `JWT_ISSUER`         | `rust-react-api`                 |                                |
 | `ACCESS_TTL_SECS`    | `900` (15 min)                   | keep short                     |
 | `REFRESH_TTL_SECS`   | `2592000` (30 days)              | sliding window via rotation    |
+| `GOOGLE_CLIENT_ID`        | _empty_                                              | optional. Empty → /auth/google/* returns 503 |
+| `GOOGLE_CLIENT_SECRET`    | _empty_                                              | optional, paired with `GOOGLE_CLIENT_ID`     |
+| `GOOGLE_REDIRECT_URI`     | `http://localhost:5173/api/auth/google/callback`     | must EXACTLY match a redirect URI registered in the Google OAuth console |
+| `OAUTH_POST_LOGIN_REDIRECT` | `/dashboard`                                       | where the SPA lands after a successful callback |
+| `OAUTH_ERROR_REDIRECT`    | `/login`                                             | where the SPA lands on failure, with `?oauth_error=<code>` |
 
 ## Rate limits (per IP, token-bucket via `tower-governor`)
 
@@ -223,6 +230,7 @@ cargo test --workspace
 | `POST /auth/login`    | 5 / min  | 5  | `Retry-After` header |
 | `POST /auth/register` | 3 / min  | 3  | `Retry-After` header |
 | `POST /auth/refresh`  | 30 / min | 30 | `Retry-After` header |
+| `GET /auth/google/*`  | 10 / min | 10 | `Retry-After` header |
 
 `SmartIpKeyExtractor` reads `Forwarded` / `X-Forwarded-For` first (nginx sets
 them), and falls back to peer IP via `ConnectInfo` for direct curl tests.

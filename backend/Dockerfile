@@ -37,15 +37,17 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS builder
 
 # Build only dependencies. This layer is cached unless Cargo.toml / Cargo.lock
-# changes — source edits don't bust it.
+# changes — source edits don't bust it. `--locked` makes cargo fail fast if
+# Cargo.lock is missing or out of sync, so we never silently re-resolve to
+# different versions inside Docker.
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json --locked
 
 # Now copy the real source and build the binary. Migrations are embedded into
 # the binary at compile time via `sqlx::migrate!`, so the runtime image doesn't
 # need the migrations/ folder.
 COPY . .
-RUN cargo build --release -p api \
+RUN cargo build --release -p api --locked \
  && strip target/release/api
 
 # ─── Stage 4: runtime ─────────────────────────────────────────────────

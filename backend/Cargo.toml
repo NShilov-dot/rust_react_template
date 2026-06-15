@@ -25,6 +25,11 @@ tokio = { version = "1.40", features = ["full"] }
 axum = "0.8"
 axum-extra = { version = "0.10", features = ["cookie"] }
 cookie = "0.18"
+# Pin `time` patch version: without Cargo.lock, the resolver grabs the
+# latest 0.3.x where `ModifierValue::Type = Self` plus cookie 0.18.1's
+# broad `impl<T: Into<Option<OffsetDateTime>>> From<T> for Expiration`
+# trip Rust 1.90's coherence check (E0119). Pin until cookie ships a fix.
+time = "=0.3.36"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["trace", "cors", "set-header"] }
 tower_governor = "0.8"
@@ -81,6 +86,17 @@ argon2 = "0.5"
 jsonwebtoken = "9"
 rand = "0.8"
 base64 = "0.22"
+
+# OAuth2 (Google)
+oauth2 = "4"
+# Used only by the OAuth client to call Google's userinfo endpoint.
+# `rustls-tls` keeps us off OpenSSL; `gzip` cuts response size; `json` for `.json()`.
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "json",
+    "gzip",
+] }
+url = "2"
 
 [profile.release]
 lto = "thin"

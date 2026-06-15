@@ -27,3 +27,8 @@ argon2 = { workspace = true }
 jsonwebtoken = { workspace = true }
 rand = { workspace = true }
 base64 = { workspace = true }
+
+# OAuth (Google)
+oauth2 = { workspace = true }
+reqwest = { workspace = true }
+url = { workspace = true }

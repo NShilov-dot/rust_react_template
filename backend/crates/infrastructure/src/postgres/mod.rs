@@ -1,3 +1,4 @@
+pub mod task_repository;
 pub mod user_repository;
 
 use std::time::Duration;

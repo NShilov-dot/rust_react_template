@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, UserRound, Users } from 'lucide-react';
+import { ArrowRight, ClipboardList, UserRound, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { Card } from '@/components/ui/card';
@@ -57,6 +57,12 @@ export default function DashboardPage() {
         aria-label="Быстрые переходы"
         className="grid grid-cols-1 gap-4 sm:grid-cols-2"
       >
+        <QuickLink
+          to="/tasks"
+          icon={ClipboardList}
+          title="Задачи"
+          description="Личный backlog: создавайте задачи, ведите статусы и приоритеты."
+        />
         <QuickLink
           to="/profile"
           icon={UserRound}

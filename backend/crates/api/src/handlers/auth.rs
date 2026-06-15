@@ -48,7 +48,7 @@ pub struct AccessResponse {
 
 // ─── Cookie helpers ──────────────────────────────────────────────────
 
-fn refresh_cookie<'a>(value: String, max_age_secs: i64) -> Cookie<'a> {
+pub(crate) fn refresh_cookie<'a>(value: String, max_age_secs: i64) -> Cookie<'a> {
     // SameSite=Strict + HttpOnly + Secure is the OWASP-recommended baseline.
     // Browsers (Chrome 88+, Firefox) treat localhost as a "secure context" so
     // `Secure` works in HTTP dev too — no need to toggle by env.
@@ -61,7 +61,7 @@ fn refresh_cookie<'a>(value: String, max_age_secs: i64) -> Cookie<'a> {
         .build()
 }
 
-fn clear_refresh_cookie<'a>() -> Cookie<'a> {
+pub(crate) fn clear_refresh_cookie<'a>() -> Cookie<'a> {
     // Same attributes as the set cookie + Max-Age=0 → browser drops it.
     Cookie::build((REFRESH_COOKIE, ""))
         .http_only(true)

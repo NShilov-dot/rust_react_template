@@ -159,6 +159,21 @@ clippy: ## Lint with clippy (warnings → errors)
 .PHONY: lint
 lint: fmt-check clippy ## Run fmt-check + clippy (use this in CI)
 
+# ─── CI mirror ────────────────────────────────────────────────────
+# Run the same checks GitHub Actions does, locally, before pushing.
+# These targets pass `--locked` so they fail fast if Cargo.lock is out
+# of sync with Cargo.toml — same behaviour as the CI job.
+.PHONY: ci ci-backend ci-frontend
+ci: ci-backend ci-frontend ## Run all CI checks (backend + frontend)
+
+ci-backend: ## Backend CI checks: fmt-check + clippy + test (locked)
+	$(CARGO) fmt --all -- --check
+	$(CARGO) clippy --workspace --all-targets --locked -- -D warnings
+	$(CARGO) test --workspace --no-fail-fast --locked
+
+ci-frontend: ## Frontend CI checks: typecheck + lint + test + build + size
+	cd frontend/app && npm run typecheck && npm run lint && npm run test && npm run build && npm run size
+
 .PHONY: clean
 clean: ## cargo clean
 	$(CARGO) clean

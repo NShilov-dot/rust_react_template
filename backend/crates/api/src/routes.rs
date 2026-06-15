@@ -51,6 +51,17 @@ pub fn router(state: AppState) -> Router {
             .finish()
             .expect("valid governor config"),
     );
+    // Google flow: looser than login (browser-driven, the user may click
+    // a couple of times) but still IP-bounded so a denial-of-service
+    // attempt against Google can't ride our quota.
+    let oauth_rl = Arc::new(
+        GovernorConfigBuilder::default()
+            .period(Duration::from_secs(6)) // ≈ 10/min sustained
+            .burst_size(10)
+            .key_extractor(SmartIpKeyExtractor)
+            .finish()
+            .expect("valid governor config"),
+    );
 
     let login = Router::new()
         .route("/auth/login", post(handlers::auth::login))
@@ -64,6 +75,7 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/refresh", post(handlers::auth::refresh))
         .layer(GovernorLayer::new(refresh_rl));
 
+<<<<<<< HEAD
     // ─── Prometheus RED metrics ───────────────────────────────────────
     // The layer auto-instruments every request: emits
     //   axum_http_requests_total{method,endpoint,status}
@@ -75,6 +87,12 @@ pub fn router(state: AppState) -> Router {
         .with_ignore_patterns(&["/metrics", "/health"])
         .with_default_metrics()
         .build_pair();
+=======
+    let oauth = Router::new()
+        .route("/auth/google/start", get(handlers::google::start))
+        .route("/auth/google/callback", get(handlers::google::callback))
+        .layer(GovernorLayer::new(oauth_rl));
+>>>>>>> origin/feaute/tasks
 
     // ─── Routes without rate limit ─────────────────────────────────────
     let unlimited = Router::new()
@@ -86,12 +104,23 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/logout", post(handlers::auth::logout))
         .route("/auth/me", get(handlers::auth::me))
         .route("/users", get(handlers::users::list))
-        .route("/users/{id}", get(handlers::users::get));
+        .route("/users/{id}", get(handlers::users::get))
+        .route(
+            "/tasks",
+            get(handlers::tasks::list).post(handlers::tasks::create),
+        )
+        .route(
+            "/tasks/{id}",
+            get(handlers::tasks::get)
+                .patch(handlers::tasks::update)
+                .delete(handlers::tasks::delete),
+        );
 
     Router::new()
         .merge(login)
         .merge(register)
         .merge(refresh)
+        .merge(oauth)
         .merge(unlimited)
         // ─── Global response headers ───────────────────────────────────
         // `nosniff` prevents browsers from MIME-sniffing JSON as HTML/JS.

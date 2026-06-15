@@ -82,6 +82,81 @@ impl UserRepository for PgUserRepository {
         Ok(())
     }
 
+    async fn create_oauth(&self, user: &User, google_id: &str) -> Result<(), RepoError> {
+        sqlx::query(
+            r#"
+            INSERT INTO users (id, email, name, password_hash, google_id, created_at, updated_at)
+            VALUES ($1, $2, $3, NULL, $4, $5, $6)
+            "#,
+        )
+        .bind(user.id.0)
+        .bind(user.email.as_str())
+        .bind(&user.name)
+        .bind(google_id)
+        .bind(user.created_at)
+        .bind(user.updated_at)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+        Ok(())
+    }
+
+    async fn find_by_google_id(&self, google_id: &str) -> Result<Option<User>, RepoError> {
+        let row: Option<UserRow> = sqlx::query_as(
+            r#"
+            SELECT id, email, name, created_at, updated_at
+            FROM users
+            WHERE google_id = $1
+            "#,
+        )
+        .bind(google_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+        row.map(User::try_from).transpose()
+    }
+
+    async fn link_google(&self, user_id: UserId, google_id: &str) -> Result<(), RepoError> {
+        // Refuse to overwrite an existing google_id on this user — if a
+        // re-link is ever needed, that should be an explicit migration
+        // path. The WHERE clause makes this a no-op for already-linked
+        // rows, and we then verify rows_affected to distinguish.
+        let res = sqlx::query(
+            r#"
+            UPDATE users
+            SET google_id = $2, updated_at = NOW()
+            WHERE id = $1 AND google_id IS NULL
+            "#,
+        )
+        .bind(user_id.0)
+        .bind(google_id)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+
+        if res.rows_affected() == 0 {
+            // Either no such user, or they already have a (possibly
+            // different) google_id. Report the more useful error.
+            let row: Option<(Option<String>,)> =
+                sqlx::query_as("SELECT google_id FROM users WHERE id = $1")
+                    .bind(user_id.0)
+                    .fetch_optional(&self.pool)
+                    .await
+                    .map_err(map_sqlx)?;
+            return match row {
+                None => Err(RepoError::NotFound),
+                Some((Some(existing),)) if existing == google_id => Ok(()),
+                Some((Some(_),)) => Err(RepoError::Conflict(
+                    "user already linked to a different Google account".into(),
+                )),
+                Some((None,)) => Err(RepoError::Storage(
+                    "link_google update affected 0 rows despite NULL google_id".into(),
+                )),
+            };
+        }
+        Ok(())
+    }
+
     async fn get(&self, id: UserId) -> Result<User, RepoError> {
         let row: UserRow = sqlx::query_as(
             r#"
@@ -116,11 +191,14 @@ impl UserRepository for PgUserRepository {
         &self,
         email: &Email,
     ) -> Result<Option<(User, PasswordHash)>, RepoError> {
+        // `IS NOT NULL` keeps OAuth-only users out of the password-login
+        // path: Login then returns InvalidCredentials, which is the
+        // semantically correct response (this account has no password).
         let row: Option<LoginRow> = sqlx::query_as(
             r#"
             SELECT id, email, name, password_hash, created_at, updated_at
             FROM users
-            WHERE email = $1
+            WHERE email = $1 AND password_hash IS NOT NULL
             "#,
         )
         .bind(email.as_str())

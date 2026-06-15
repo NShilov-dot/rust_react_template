@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ChevronsLeft, LayoutDashboard, UserRound, Users, X } from 'lucide-react';
+import {
+  ChevronsLeft,
+  ClipboardList,
+  LayoutDashboard,
+  UserRound,
+  Users,
+  X,
+} from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
@@ -9,6 +16,7 @@ import { cn } from '@/lib/utils';
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/tasks', label: 'Задачи', icon: ClipboardList },
   { to: '/profile', label: 'Профиль', icon: UserRound },
   { to: '/users', label: 'Пользователи', icon: Users },
 ] as const;

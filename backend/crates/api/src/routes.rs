@@ -75,7 +75,6 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/refresh", post(handlers::auth::refresh))
         .layer(GovernorLayer::new(refresh_rl));
 
-<<<<<<< HEAD
     // ─── Prometheus RED metrics ───────────────────────────────────────
     // The layer auto-instruments every request: emits
     //   axum_http_requests_total{method,endpoint,status}
@@ -87,12 +86,11 @@ pub fn router(state: AppState) -> Router {
         .with_ignore_patterns(&["/metrics", "/health"])
         .with_default_metrics()
         .build_pair();
-=======
+
     let oauth = Router::new()
         .route("/auth/google/start", get(handlers::google::start))
         .route("/auth/google/callback", get(handlers::google::callback))
         .layer(GovernorLayer::new(oauth_rl));
->>>>>>> origin/feaute/tasks
 
     // ─── Routes without rate limit ─────────────────────────────────────
     let unlimited = Router::new()

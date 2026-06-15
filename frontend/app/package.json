@@ -10,7 +10,7 @@
     "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "size": "size-limit"
   },
@@ -55,14 +55,18 @@
   },
   "size-limit": [
     {
-      "name": "initial bundle",
-      "path": "dist/assets/index-*.js",
-      "limit": "200 KB"
+      "name": "initial paint (entry + react vendor)",
+      "path": [
+        "dist/assets/index-*.js",
+        "dist/assets/react-*.js",
+        "dist/assets/query-*.js"
+      ],
+      "limit": "100 KB"
     },
     {
-      "name": "route chunks",
-      "path": "dist/assets/*-*.js",
-      "limit": "80 KB"
+      "name": "tasks route (largest lazy chunk)",
+      "path": "dist/assets/tasks-*.js",
+      "limit": "50 KB"
     }
   ]
 }

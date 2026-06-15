@@ -1,0 +1,45 @@
+version: 2
+updates:
+  # Rust workspace
+  - package-ecosystem: cargo
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      patch:
+        update-types: [patch]
+      minor:
+        update-types: [minor]
+
+  # Frontend
+  - package-ecosystem: npm
+    directory: /frontend/app
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      patch:
+        update-types: [patch]
+      minor:
+        update-types: [minor]
+
+  # GitHub Actions themselves
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+
+  # Dockerfiles — backend, frontend, edge nginx
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: monthly
+  - package-ecosystem: docker
+    directory: /frontend/app
+    schedule:
+      interval: monthly
+  - package-ecosystem: docker
+    directory: /nginx
+    schedule:
+      interval: monthly

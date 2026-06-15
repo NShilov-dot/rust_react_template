@@ -88,7 +88,7 @@ rand = "0.8"
 base64 = "0.22"
 
 # OAuth2 (Google)
-oauth2 = "4"
+oauth2 = "5"
 # Used only by the OAuth client to call Google's userinfo endpoint.
 # `rustls-tls` keeps us off OpenSSL; `gzip` cuts response size; `json` for `.json()`.
 reqwest = { version = "0.12", default-features = false, features = [

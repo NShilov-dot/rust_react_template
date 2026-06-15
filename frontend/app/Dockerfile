@@ -24,11 +24,16 @@ COPY . .
 RUN npm run build
 
 # ─── Stage 2: nginx static runtime ───────────────────────────────────
-FROM nginx:1.27-alpine AS runtime
+# `nginx-unprivileged` is the same nginx image, repacked to run entirely
+# as a non-root user (uid 101) and listen on :8080 instead of :80.
+# Defence in depth: a container escape via nginx no longer lands as root.
+FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 80
+EXPOSE 8080
 
+# Use 127.0.0.1 instead of `localhost` — Alpine's wget resolves localhost
+# to ::1 first, but nginx-unprivileged only binds IPv4 by default.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s \
-  CMD wget -q --spider http://localhost/healthz || exit 1
+  CMD wget -q --spider http://127.0.0.1:8080/healthz || exit 1

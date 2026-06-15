@@ -62,6 +62,19 @@ pub fn router(state: AppState) -> Router {
             .finish()
             .expect("valid governor config"),
     );
+    // Tasks write path: caps how fast an authenticated client can spam
+    // INSERTs/UPDATEs/DELETEs. Per-IP rather than per-user (per-user would
+    // need a custom key extractor reading the JWT — overkill for an MVP).
+    // Reads are not gated: list/get are cheap and a logged-in user
+    // legitimately calls them on every navigation.
+    let tasks_write_rl = Arc::new(
+        GovernorConfigBuilder::default()
+            .period(Duration::from_secs(1)) // ≈ 60/min sustained
+            .burst_size(30)
+            .key_extractor(SmartIpKeyExtractor)
+            .finish()
+            .expect("valid governor config"),
+    );
 
     let login = Router::new()
         .route("/auth/login", post(handlers::auth::login))
@@ -92,6 +105,18 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/google/callback", get(handlers::google::callback))
         .layer(GovernorLayer::new(oauth_rl));
 
+    // Writes go through the rate-limited router; reads stay in `unlimited`
+    // alongside the other GETs. axum merges these two routers on the same
+    // path because they declare different HTTP methods.
+    let tasks_write = Router::new()
+        .route("/tasks", post(handlers::tasks::create))
+        .route(
+            "/tasks/{id}",
+            axum::routing::patch(handlers::tasks::update)
+                .delete(handlers::tasks::delete),
+        )
+        .layer(GovernorLayer::new(tasks_write_rl));
+
     // ─── Routes without rate limit ─────────────────────────────────────
     let unlimited = Router::new()
         .route("/health", get(handlers::health::health))
@@ -103,22 +128,15 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/me", get(handlers::auth::me))
         .route("/users", get(handlers::users::list))
         .route("/users/{id}", get(handlers::users::get))
-        .route(
-            "/tasks",
-            get(handlers::tasks::list).post(handlers::tasks::create),
-        )
-        .route(
-            "/tasks/{id}",
-            get(handlers::tasks::get)
-                .patch(handlers::tasks::update)
-                .delete(handlers::tasks::delete),
-        );
+        .route("/tasks", get(handlers::tasks::list))
+        .route("/tasks/{id}", get(handlers::tasks::get));
 
     Router::new()
         .merge(login)
         .merge(register)
         .merge(refresh)
         .merge(oauth)
+        .merge(tasks_write)
         .merge(unlimited)
         // ─── Global response headers ───────────────────────────────────
         // `nosniff` prevents browsers from MIME-sniffing JSON as HTML/JS.

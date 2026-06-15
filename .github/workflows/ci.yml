@@ -139,7 +139,7 @@ jobs:
           : > frontend/app/corporate-ca.pem
 
       - name: Build backend image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: backend
           push: false
@@ -149,7 +149,7 @@ jobs:
           tags: rust_react-backend:ci
 
       - name: Build frontend image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: frontend/app
           push: false
@@ -159,7 +159,7 @@ jobs:
           tags: rust_react-frontend:ci
 
       - name: Build edge nginx image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: nginx
           push: false

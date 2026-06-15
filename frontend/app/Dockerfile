@@ -5,7 +5,7 @@
 # service.
 
 # ─── Stage 1: build ──────────────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 
 # Corporate CA injection (for SSL-inspecting proxies). Empty file = no-op.

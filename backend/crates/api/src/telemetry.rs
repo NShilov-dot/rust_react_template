@@ -29,12 +29,11 @@ impl TelemetryGuard {
 /// Initialise tracing/metrics output.
 ///
 /// Selection by env:
-/// - `RUST_LOG`                    → EnvFilter directives, default `info`.
-/// - `LOG_FORMAT=json|pretty`      → stdout formatter, default `pretty` for
-///                                    dev, `json` when this binary runs in
-///                                    a container is recommended.
+/// - `RUST_LOG` → EnvFilter directives, default `info`.
+/// - `LOG_FORMAT=json|pretty` → stdout formatter, default `pretty` for dev,
+///   `json` recommended when this binary runs in a container.
 /// - `OTEL_EXPORTER_OTLP_ENDPOINT` → enables OTLP gRPC export when set.
-///                                    Typical value: `http://otel-collector:4317`.
+///   Typical value: `http://otel-collector:4317`.
 ///
 /// Resource attributes attached to every span:
 ///   service.name = api

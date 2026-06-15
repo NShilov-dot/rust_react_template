@@ -129,7 +129,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # Empty corporate-ca.pem keeps the backend Dockerfile happy in CI —
       # the file is gitignored locally but the COPY step expects it.

@@ -71,7 +71,7 @@ opentelemetry_sdk = { version = "0.26", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.26", features = ["grpc-tonic"] }
 # `semconv_experimental` is needed for stable names like DEPLOYMENT_ENVIRONMENT_NAME
 # (otel keeps moving these between "stable" and "experimental" between releases).
-opentelemetry-semantic-conventions = { version = "0.26", features = ["semconv_experimental"] }
+opentelemetry-semantic-conventions = { version = "0.32", features = ["semconv_experimental"] }
 
 # Metrics
 metrics = "0.23"

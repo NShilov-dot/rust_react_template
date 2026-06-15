@@ -75,7 +75,7 @@ opentelemetry-semantic-conventions = { version = "0.26", features = ["semconv_ex
 
 # Metrics
 metrics = "0.23"
-metrics-exporter-prometheus = { version = "0.15", default-features = false }
+metrics-exporter-prometheus = { version = "0.18", default-features = false }
 axum-prometheus = "0.7"
 
 # Config

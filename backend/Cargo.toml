@@ -84,7 +84,7 @@ dotenvy = "0.15"
 # Auth
 argon2 = "0.5"
 jsonwebtoken = "9"
-rand = "0.8"
+rand = "0.9"
 base64 = "0.22"
 
 # OAuth2 (Google)

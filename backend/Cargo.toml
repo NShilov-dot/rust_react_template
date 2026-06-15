@@ -23,7 +23,7 @@ tokio = { version = "1.40", features = ["full"] }
 
 # Web framework (axum 0.8 uses `/{id}` path-param syntax)
 axum = "0.8"
-axum-extra = { version = "0.10", features = ["cookie"] }
+axum-extra = { version = "0.12", features = ["cookie"] }
 cookie = "0.18"
 # Pin `time` patch version: without Cargo.lock, the resolver grabs the
 # latest 0.3.x where `ModifierValue::Type = Self` plus cookie 0.18.1's

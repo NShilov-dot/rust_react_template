@@ -37,7 +37,10 @@ impl ListTasks {
     }
 
     pub async fn execute(&self, input: ListTasksInput) -> Result<ListTasksOutput, RepoError> {
-        let limit = input.limit.unwrap_or(DEFAULT_PAGE_SIZE).clamp(1, MAX_PAGE_SIZE);
+        let limit = input
+            .limit
+            .unwrap_or(DEFAULT_PAGE_SIZE)
+            .clamp(1, MAX_PAGE_SIZE);
         // Ask the repo for `limit + 1` rows — if we got the extra, there's
         // another page, and the `limit`-th row is the cursor for it.
         let filter = TaskListFilter {

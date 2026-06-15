@@ -88,8 +88,16 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let state = AppState {
-        register: Arc::new(Register::new(user_repo.clone(), hasher.clone(), sessions.clone())),
-        login: Arc::new(Login::new(user_repo.clone(), hasher.clone(), sessions.clone())),
+        register: Arc::new(Register::new(
+            user_repo.clone(),
+            hasher.clone(),
+            sessions.clone(),
+        )),
+        login: Arc::new(Login::new(
+            user_repo.clone(),
+            hasher.clone(),
+            sessions.clone(),
+        )),
         refresh: Arc::new(Refresh::new(sessions.clone())),
         logout: Arc::new(Logout::new(sessions.clone())),
         get_user: Arc::new(GetUser::new(user_repo.clone(), cache.clone())),
@@ -130,7 +138,9 @@ async fn shutdown_signal() {
     use tokio::signal;
 
     let ctrl_c = async {
-        signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
     };
 
     #[cfg(unix)]

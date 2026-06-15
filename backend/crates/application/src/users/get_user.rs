@@ -31,7 +31,11 @@ impl GetUser {
         let user = self.repo.get(id).await?;
 
         if let Ok(bytes) = serde_json::to_vec(&user) {
-            if let Err(e) = self.cache.set_bytes(&key, &bytes, Some(CACHE_TTL_SECS)).await {
+            if let Err(e) = self
+                .cache
+                .set_bytes(&key, &bytes, Some(CACHE_TTL_SECS))
+                .await
+            {
                 tracing::warn!(error = %e, "failed to populate cache");
             }
         }

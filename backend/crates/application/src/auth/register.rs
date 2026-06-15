@@ -5,8 +5,7 @@ use thiserror::Error;
 use domain::{DomainError, Email, Password, User};
 
 use crate::ports::{
-    HasherError, PasswordHasher, RepoError, SessionError, SessionManager, TokenPair,
-    UserRepository,
+    HasherError, PasswordHasher, RepoError, SessionError, SessionManager, TokenPair, UserRepository,
 };
 
 #[derive(Debug, Error)]
@@ -47,7 +46,11 @@ impl Register {
         hasher: Arc<dyn PasswordHasher>,
         sessions: Arc<dyn SessionManager>,
     ) -> Self {
-        Self { repo, hasher, sessions }
+        Self {
+            repo,
+            hasher,
+            sessions,
+        }
     }
 
     pub async fn execute(&self, input: RegisterInput) -> Result<RegisterOutput, RegisterError> {

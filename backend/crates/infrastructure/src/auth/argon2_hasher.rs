@@ -48,8 +48,8 @@ impl PasswordHasher for Argon2Hasher {
         let password = password.to_owned();
         let hash_str = hash.as_str().to_owned();
         tokio::task::spawn_blocking(move || -> Result<bool, HasherError> {
-            let parsed = ArgonPhc::new(&hash_str)
-                .map_err(|e| HasherError::Verification(e.to_string()))?;
+            let parsed =
+                ArgonPhc::new(&hash_str).map_err(|e| HasherError::Verification(e.to_string()))?;
             Ok(Argon2::default()
                 .verify_password(password.as_bytes(), &parsed)
                 .is_ok())

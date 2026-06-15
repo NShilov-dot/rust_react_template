@@ -8,7 +8,9 @@ use application::auth::{
 };
 use application::ports::TokenPair;
 
-use crate::{error::ApiError, extractors::AuthUser, handlers::users::UserResponse, state::AppState};
+use crate::{
+    error::ApiError, extractors::AuthUser, handlers::users::UserResponse, state::AppState,
+};
 
 /// Cookie name carrying the refresh token. HttpOnly — JS can't read it.
 const REFRESH_COOKIE: &str = "refresh_token";
@@ -210,4 +212,3 @@ pub async fn me(
     let user = state.get_user.execute(user_id).await?;
     Ok(Json(user.into()))
 }
-

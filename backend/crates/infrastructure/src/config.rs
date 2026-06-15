@@ -44,16 +44,16 @@ impl Config {
 
         let database_url = std::env::var("DATABASE_URL")
             .map_err(|_| anyhow::anyhow!("DATABASE_URL is required"))?;
-        let redis_url = std::env::var("REDIS_URL")
-            .map_err(|_| anyhow::anyhow!("REDIS_URL is required"))?;
+        let redis_url =
+            std::env::var("REDIS_URL").map_err(|_| anyhow::anyhow!("REDIS_URL is required"))?;
 
         let bind_addr: SocketAddr = std::env::var("BIND_ADDR")
             .unwrap_or_else(|_| "0.0.0.0:8080".into())
             .parse()
             .map_err(|e| anyhow::anyhow!("BIND_ADDR is not a valid socket address: {e}"))?;
 
-        let log_level = std::env::var("RUST_LOG")
-            .unwrap_or_else(|_| "info,api=debug,tower_http=info".into());
+        let log_level =
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "info,api=debug,tower_http=info".into());
 
         let db_max_connections = parse_env("DB_MAX_CONNECTIONS", 10)?;
 
@@ -68,15 +68,18 @@ impl Config {
         let refresh_ttl_secs: u64 = parse_env("REFRESH_TTL_SECS", 60 * 60 * 24 * 30)?; // 30 days
 
         let google = match (
-            std::env::var("GOOGLE_CLIENT_ID").ok().filter(|s| !s.is_empty()),
-            std::env::var("GOOGLE_CLIENT_SECRET").ok().filter(|s| !s.is_empty()),
+            std::env::var("GOOGLE_CLIENT_ID")
+                .ok()
+                .filter(|s| !s.is_empty()),
+            std::env::var("GOOGLE_CLIENT_SECRET")
+                .ok()
+                .filter(|s| !s.is_empty()),
         ) {
             (Some(client_id), Some(client_secret)) => Some(GoogleConfig {
                 client_id,
                 client_secret,
-                redirect_uri: std::env::var("GOOGLE_REDIRECT_URI").unwrap_or_else(|_| {
-                    "http://localhost:5173/api/auth/google/callback".into()
-                }),
+                redirect_uri: std::env::var("GOOGLE_REDIRECT_URI")
+                    .unwrap_or_else(|_| "http://localhost:5173/api/auth/google/callback".into()),
                 post_login_redirect: std::env::var("OAUTH_POST_LOGIN_REDIRECT")
                     .unwrap_or_else(|_| "/dashboard".into()),
                 error_redirect: std::env::var("OAUTH_ERROR_REDIRECT")

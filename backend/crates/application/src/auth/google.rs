@@ -143,7 +143,14 @@ impl GoogleAuth {
             .name
             .clone()
             .filter(|n| !n.trim().is_empty())
-            .unwrap_or_else(|| email.as_str().split('@').next().unwrap_or("user").to_string());
+            .unwrap_or_else(|| {
+                email
+                    .as_str()
+                    .split('@')
+                    .next()
+                    .unwrap_or("user")
+                    .to_string()
+            });
 
         let user = User::new(email, name)?;
         self.repo.create_oauth(&user, &info.sub).await?;

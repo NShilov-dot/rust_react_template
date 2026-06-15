@@ -109,10 +109,7 @@ fn classify(e: &GoogleAuthError) -> &'static str {
 }
 
 fn redirect_with_error(state: &AppState, code: &str) -> Response {
-    let base = state
-        .google_error_redirect
-        .as_deref()
-        .unwrap_or("/login");
+    let base = state.google_error_redirect.as_deref().unwrap_or("/login");
     let sep = if base.contains('?') { '&' } else { '?' };
     let target = format!("{base}{sep}oauth_error={code}");
     Redirect::to(&target).into_response()

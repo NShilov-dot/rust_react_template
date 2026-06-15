@@ -33,7 +33,10 @@ impl IntoResponse for ApiError {
             Self::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
             Self::Internal => {
                 tracing::error!("internal server error");
-                (StatusCode::INTERNAL_SERVER_ERROR, "internal error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal error".to_string(),
+                )
             }
         };
         (status, Json(json!({ "error": message }))).into_response()

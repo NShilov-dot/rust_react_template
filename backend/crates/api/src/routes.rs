@@ -112,8 +112,7 @@ pub fn router(state: AppState) -> Router {
         .route("/tasks", post(handlers::tasks::create))
         .route(
             "/tasks/{id}",
-            axum::routing::patch(handlers::tasks::update)
-                .delete(handlers::tasks::delete),
+            axum::routing::patch(handlers::tasks::update).delete(handlers::tasks::delete),
         )
         .layer(GovernorLayer::new(tasks_write_rl));
 

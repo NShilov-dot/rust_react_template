@@ -27,7 +27,11 @@ impl Email {
         let raw = raw.into();
         let trimmed = raw.trim();
         let at_count = trimmed.matches('@').count();
-        if at_count != 1 || trimmed.len() > 254 || trimmed.starts_with('@') || trimmed.ends_with('@') {
+        if at_count != 1
+            || trimmed.len() > 254
+            || trimmed.starts_with('@')
+            || trimmed.ends_with('@')
+        {
             return Err(DomainError::InvalidEmail(raw));
         }
         Ok(Self(trimmed.to_lowercase()))

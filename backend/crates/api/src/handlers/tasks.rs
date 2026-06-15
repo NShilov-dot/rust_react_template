@@ -107,16 +107,15 @@ fn decode_cursor(s: &str) -> Result<(DateTime<Utc>, Uuid), ApiError> {
     let bytes = URL_SAFE_NO_PAD
         .decode(s)
         .map_err(|_| ApiError::BadRequest("invalid cursor".into()))?;
-    let raw = std::str::from_utf8(&bytes)
-        .map_err(|_| ApiError::BadRequest("invalid cursor".into()))?;
+    let raw =
+        std::str::from_utf8(&bytes).map_err(|_| ApiError::BadRequest("invalid cursor".into()))?;
     let (ts_part, id_part) = raw
         .split_once('~')
         .ok_or_else(|| ApiError::BadRequest("invalid cursor".into()))?;
     let ts = DateTime::parse_from_rfc3339(ts_part)
         .map_err(|_| ApiError::BadRequest("invalid cursor".into()))?
         .with_timezone(&Utc);
-    let id = Uuid::parse_str(id_part)
-        .map_err(|_| ApiError::BadRequest("invalid cursor".into()))?;
+    let id = Uuid::parse_str(id_part).map_err(|_| ApiError::BadRequest("invalid cursor".into()))?;
     Ok((ts, id))
 }
 

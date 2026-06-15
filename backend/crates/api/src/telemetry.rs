@@ -46,8 +46,8 @@ pub fn init(default_filter: &str) -> anyhow::Result<TelemetryGuard> {
     // logs still include trace IDs if a parent span exists in headers.
     opentelemetry::global::set_text_map_propagator(TraceContextPropagator::new());
 
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(default_filter));
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
 
     // ─── Stdout layer (pretty for dev, JSON for prod/observability) ─────
     let log_format = std::env::var("LOG_FORMAT")

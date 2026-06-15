@@ -4,9 +4,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use application::ports::{RepoError, TaskListFilter, TaskRepository};
-use domain::{
-    Task, TaskDescription, TaskId, TaskPriority, TaskStatus, TaskTitle, UserId,
-};
+use domain::{Task, TaskDescription, TaskId, TaskPriority, TaskStatus, TaskTitle, UserId};
 
 pub struct PgTaskRepository {
     pool: PgPool,
@@ -39,13 +37,13 @@ impl TryFrom<TaskRow> for Task {
         // longer represent — never a 400 to the client, always a 500.
         let title = TaskTitle::parse(row.title)
             .map_err(|e| RepoError::Storage(format!("invalid task title in db: {e}")))?;
-        let description = match row.description {
-            Some(raw) if !raw.is_empty() => Some(
-                TaskDescription::parse(raw)
-                    .map_err(|e| RepoError::Storage(format!("invalid task description in db: {e}")))?,
-            ),
-            _ => None,
-        };
+        let description =
+            match row.description {
+                Some(raw) if !raw.is_empty() => Some(TaskDescription::parse(raw).map_err(|e| {
+                    RepoError::Storage(format!("invalid task description in db: {e}"))
+                })?),
+                _ => None,
+            };
         let status = TaskStatus::parse(&row.status)
             .map_err(|e| RepoError::Storage(format!("invalid status in db: {e}")))?;
         let priority = TaskPriority::parse(&row.priority)
@@ -136,8 +134,9 @@ impl TaskRepository for PgTaskRepository {
         // so the planner can pick the right index every time. The cost of
         // duplication is small and beats a single string-formatted query.
         let rows: Vec<TaskRow> = match (filter.status, filter.cursor) {
-            (Some(status), Some((cur_ts, cur_id))) => sqlx::query_as(
-                r#"
+            (Some(status), Some((cur_ts, cur_id))) => {
+                sqlx::query_as(
+                    r#"
                 SELECT id, owner_id, title, description, status, priority,
                        due_date, created_at, updated_at
                 FROM tasks
@@ -147,17 +146,19 @@ impl TaskRepository for PgTaskRepository {
                 ORDER BY created_at DESC, id DESC
                 LIMIT $5
                 "#,
-            )
-            .bind(owner_id.0)
-            .bind(status.as_str())
-            .bind(cur_ts)
-            .bind(cur_id)
-            .bind(filter.limit)
-            .fetch_all(&self.pool)
-            .await,
+                )
+                .bind(owner_id.0)
+                .bind(status.as_str())
+                .bind(cur_ts)
+                .bind(cur_id)
+                .bind(filter.limit)
+                .fetch_all(&self.pool)
+                .await
+            }
 
-            (Some(status), None) => sqlx::query_as(
-                r#"
+            (Some(status), None) => {
+                sqlx::query_as(
+                    r#"
                 SELECT id, owner_id, title, description, status, priority,
                        due_date, created_at, updated_at
                 FROM tasks
@@ -165,15 +166,17 @@ impl TaskRepository for PgTaskRepository {
                 ORDER BY created_at DESC, id DESC
                 LIMIT $3
                 "#,
-            )
-            .bind(owner_id.0)
-            .bind(status.as_str())
-            .bind(filter.limit)
-            .fetch_all(&self.pool)
-            .await,
+                )
+                .bind(owner_id.0)
+                .bind(status.as_str())
+                .bind(filter.limit)
+                .fetch_all(&self.pool)
+                .await
+            }
 
-            (None, Some((cur_ts, cur_id))) => sqlx::query_as(
-                r#"
+            (None, Some((cur_ts, cur_id))) => {
+                sqlx::query_as(
+                    r#"
                 SELECT id, owner_id, title, description, status, priority,
                        due_date, created_at, updated_at
                 FROM tasks
@@ -182,16 +185,18 @@ impl TaskRepository for PgTaskRepository {
                 ORDER BY created_at DESC, id DESC
                 LIMIT $4
                 "#,
-            )
-            .bind(owner_id.0)
-            .bind(cur_ts)
-            .bind(cur_id)
-            .bind(filter.limit)
-            .fetch_all(&self.pool)
-            .await,
+                )
+                .bind(owner_id.0)
+                .bind(cur_ts)
+                .bind(cur_id)
+                .bind(filter.limit)
+                .fetch_all(&self.pool)
+                .await
+            }
 
-            (None, None) => sqlx::query_as(
-                r#"
+            (None, None) => {
+                sqlx::query_as(
+                    r#"
                 SELECT id, owner_id, title, description, status, priority,
                        due_date, created_at, updated_at
                 FROM tasks
@@ -199,11 +204,12 @@ impl TaskRepository for PgTaskRepository {
                 ORDER BY created_at DESC, id DESC
                 LIMIT $2
                 "#,
-            )
-            .bind(owner_id.0)
-            .bind(filter.limit)
-            .fetch_all(&self.pool)
-            .await,
+                )
+                .bind(owner_id.0)
+                .bind(filter.limit)
+                .fetch_all(&self.pool)
+                .await
+            }
         }
         .map_err(map_sqlx)?;
         rows.into_iter().map(Task::try_from).collect()

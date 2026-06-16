@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::{
+    extract::DefaultBodyLimit,
     http::{header, HeaderValue},
     routing::{get, post},
     Router,
@@ -137,6 +138,13 @@ pub fn router(state: AppState) -> Router {
         .merge(oauth)
         .merge(tasks_write)
         .merge(unlimited)
+        // ─── Global request body limit ─────────────────────────────────
+        // All API payloads (auth JSON, task create/update) are tiny. 64 KiB
+        // is a generous ceiling that no legitimate request will exceed.
+        // Axum's Json extractor reads this extension and returns 413 before
+        // loading the body into memory. nginx enforces the same cap at the
+        // edge (defence-in-depth); this layer covers the direct :8080 path.
+        .layer(DefaultBodyLimit::max(64 * 1024))
         // ─── Global response headers ───────────────────────────────────
         // `nosniff` prevents browsers from MIME-sniffing JSON as HTML/JS.
         // The HTML-specific headers (CSP, X-Frame-Options) live on nginx

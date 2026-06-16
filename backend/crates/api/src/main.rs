@@ -66,7 +66,8 @@ async fn main() -> anyhow::Result<()> {
             tracing::info!("google oauth enabled");
             let client: Arc<dyn GoogleAuthClient> = Arc::new(GoogleOAuthClient::new(
                 g.client_id,
-                g.client_secret,
+                // Privileged unwrap site — see the JWT_SECRET comment above.
+                g.client_secret.into_inner(),
                 g.redirect_uri,
             )?);
             let use_case = Arc::new(GoogleAuth::new(

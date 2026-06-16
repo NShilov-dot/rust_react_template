@@ -1,6 +1,41 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
+/// Wraps a String that must never appear in Debug output. Any struct that
+/// holds `Secret` keeps its `#[derive(Debug)]` safe — the field prints as
+/// `Secret([REDACTED])` instead of the raw value, so an accidental
+/// `tracing::debug!("{:?}", cfg)`, a panic backtrace, or an OTLP span
+/// attribute can't leak signing keys / OAuth client secrets into logs.
+///
+/// Caveat: redaction only fires at the Debug boundary. Code that explicitly
+/// pulls the value via `.expose()` and prints it still leaks — treat that
+/// method as a privileged call site (audit-grep `\.expose\(\)`).
+#[derive(Clone)]
+pub struct Secret(String);
+
+impl Secret {
+    pub fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    /// Borrow the raw value. Only use when handing off to a constructor
+    /// that needs the underlying string (e.g. signing-key setup).
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+
+    /// Consume and return the raw value. Same caveat as `expose`.
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Secret([REDACTED])")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database_url: String,
@@ -14,7 +49,7 @@ pub struct Config {
 
 #[derive(Debug, Clone)]
 pub struct AuthConfig {
-    pub jwt_secret: String,
+    pub jwt_secret: Secret,
     pub jwt_issuer: String,
     pub access_ttl: Duration,
     pub refresh_ttl: Duration,
@@ -25,8 +60,10 @@ pub struct AuthConfig {
 /// routes return 503 (the feature is just off).
 #[derive(Debug, Clone)]
 pub struct GoogleConfig {
+    /// Public per OAuth spec — appears in the authorize URL the user sees.
+    /// Deliberately NOT a `Secret`.
     pub client_id: String,
-    pub client_secret: String,
+    pub client_secret: Secret,
     /// Must exactly match what's registered in the Google OAuth console.
     /// Dev default: `http://localhost:5173/api/auth/google/callback`
     /// (routed through edge nginx → backend).
@@ -77,7 +114,7 @@ impl Config {
         ) {
             (Some(client_id), Some(client_secret)) => Some(GoogleConfig {
                 client_id,
-                client_secret,
+                client_secret: Secret::new(client_secret),
                 redirect_uri: std::env::var("GOOGLE_REDIRECT_URI")
                     .unwrap_or_else(|_| "http://localhost:5173/api/auth/google/callback".into()),
                 post_login_redirect: std::env::var("OAUTH_POST_LOGIN_REDIRECT")
@@ -95,7 +132,7 @@ impl Config {
             log_level,
             db_max_connections,
             auth: AuthConfig {
-                jwt_secret,
+                jwt_secret: Secret::new(jwt_secret),
                 jwt_issuer,
                 access_ttl: Duration::from_secs(access_ttl_secs),
                 refresh_ttl: Duration::from_secs(refresh_ttl_secs),

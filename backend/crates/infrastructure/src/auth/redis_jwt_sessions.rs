@@ -33,6 +33,8 @@ use uuid::Uuid;
 use application::ports::{SessionError, SessionManager, TokenPair};
 use domain::UserId;
 
+use crate::config::Secret;
+
 const ROTATE_LUA: &str = r#"
 if redis.call('EXISTS', KEYS[3]) == 1 then
     return redis.error_reply('family_revoked')
@@ -56,7 +58,7 @@ return user_id
 
 #[derive(Debug, Clone)]
 pub struct SessionConfig {
-    pub jwt_secret: String,
+    pub jwt_secret: Secret,
     pub jwt_issuer: String,
     pub access_ttl: Duration,
     pub refresh_ttl: Duration,
@@ -80,11 +82,11 @@ pub struct RedisJwtSessions {
 
 impl RedisJwtSessions {
     pub fn new(redis: ConnectionManager, config: SessionConfig) -> anyhow::Result<Self> {
-        if config.jwt_secret.len() < 32 {
+        if config.jwt_secret.expose().len() < 32 {
             anyhow::bail!("JWT_SECRET must be at least 32 bytes");
         }
-        let encoding = EncodingKey::from_secret(config.jwt_secret.as_bytes());
-        let decoding = DecodingKey::from_secret(config.jwt_secret.as_bytes());
+        let encoding = EncodingKey::from_secret(config.jwt_secret.expose().as_bytes());
+        let decoding = DecodingKey::from_secret(config.jwt_secret.expose().as_bytes());
         let rotate_script = redis::Script::new(ROTATE_LUA);
         Ok(Self {
             redis,

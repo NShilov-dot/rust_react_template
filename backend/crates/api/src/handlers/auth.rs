@@ -51,13 +51,21 @@ pub struct AccessResponse {
 // ─── Cookie helpers ──────────────────────────────────────────────────
 
 pub(crate) fn refresh_cookie<'a>(value: String, max_age_secs: i64) -> Cookie<'a> {
-    // SameSite=Strict + HttpOnly + Secure is the OWASP-recommended baseline.
-    // Browsers (Chrome 88+, Firefox) treat localhost as a "secure context" so
-    // `Secure` works in HTTP dev too — no need to toggle by env.
+    // HttpOnly + Secure + SameSite=Lax. NOT Strict: the Google OAuth flow
+    // ends with a cross-site top-level redirect that sets the cookie and
+    // bounces to /dashboard; Safari and older Firefox drop Strict cookies
+    // set during a cross-site redirect chain on the *first* follow-up
+    // request — i.e. the SessionBootstrap refresh fires without the cookie
+    // and the user appears logged out right after signing in. Lax allows
+    // the cookie on top-level GETs (what OAuth needs) and still blocks
+    // CSRF on the only state-changing cookie-authed endpoints we have
+    // (/auth/refresh, /auth/logout) since browsers don't attach Lax
+    // cookies on cross-site POSTs.
+    // localhost counts as a "secure context" so `Secure` works in HTTP dev.
     Cookie::build((REFRESH_COOKIE, value))
         .http_only(true)
         .secure(true)
-        .same_site(SameSite::Strict)
+        .same_site(SameSite::Lax)
         .path("/")
         .max_age(cookie::time::Duration::seconds(max_age_secs))
         .build()
@@ -68,7 +76,7 @@ pub(crate) fn clear_refresh_cookie<'a>() -> Cookie<'a> {
     Cookie::build((REFRESH_COOKIE, ""))
         .http_only(true)
         .secure(true)
-        .same_site(SameSite::Strict)
+        .same_site(SameSite::Lax)
         .path("/")
         .max_age(cookie::time::Duration::ZERO)
         .build()

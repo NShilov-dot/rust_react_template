@@ -51,9 +51,13 @@ services:
     expose:
       - "8080"
     ports:
-      # Also exposed publicly so `curl localhost:8080/health` works
-      # without going through nginx.
-      - "8080:8080"
+      # Bound to loopback ONLY. Publishing to 0.0.0.0 bypasses every header
+      # set by edge nginx (CSP, X-Frame-Options, the /metrics deny rule) and
+      # gives an attacker a stable public route to the backend. For
+      # host-local debugging `curl localhost:8080/health` keeps working;
+      # production should drop this `ports:` block entirely and rely on
+      # `docker compose exec backend ...`.
+      - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy

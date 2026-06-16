@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::warn;
 
@@ -9,6 +10,15 @@ use crate::ports::{
     AuthRequest, CacheError, CacheStore, GoogleAuthClient, GoogleUserInfo, OAuthError, RepoError,
     SessionError, SessionManager, TokenPair, UserRepository,
 };
+
+/// Cache payload bound to a Google OAuth `state` value. Holds both the
+/// PKCE verifier (RFC 7636) and the OIDC nonce — the latter must equal
+/// the `nonce` claim in the id_token returned at the token endpoint.
+#[derive(Debug, Serialize, Deserialize)]
+struct StateBundle {
+    pkce: String,
+    nonce: String,
+}
 
 #[derive(Debug, Error)]
 pub enum GoogleAuthError {
@@ -72,19 +82,30 @@ impl GoogleAuth {
         }
     }
 
-    /// Step 1 — build the URL we'll bounce the user to, AND persist the
-    /// PKCE verifier under the state key so we can recover it in `callback`.
+    /// Step 1 — build the URL we'll bounce the user to, AND persist both
+    /// the PKCE verifier and the OIDC nonce under the state key so we can
+    /// recover them in `callback`.
     pub async fn start(&self) -> Result<String, GoogleAuthError> {
         let AuthRequest {
             authorize_url,
             csrf_state,
             pkce_verifier,
+            nonce,
         } = self.client.authorize();
+
+        let bundle = serde_json::to_vec(&StateBundle {
+            pkce: pkce_verifier,
+            nonce,
+        })
+        .map_err(|e| {
+            warn!(error = %e, "failed to serialize state bundle");
+            GoogleAuthError::OAuth(OAuthError::Provider(e.to_string()))
+        })?;
 
         self.cache
             .set_bytes(
                 &state_cache_key(&csrf_state),
-                pkce_verifier.as_bytes(),
+                &bundle,
                 Some(self.state_ttl_secs),
             )
             .await?;
@@ -94,23 +115,29 @@ impl GoogleAuth {
 
     /// Step 2 — Google bounced the user back with `code` + `state`. Verify
     /// the state was one we issued (and not replayed), recover the PKCE
-    /// verifier, swap the code for user info, then resolve to a session.
+    /// verifier + nonce, swap the code for an id_token (signature-verified
+    /// by the client), then resolve to a session.
     pub async fn callback(
         &self,
         code: &str,
         state: &str,
     ) -> Result<GoogleAuthOutput, GoogleAuthError> {
         let key = state_cache_key(state);
-        let Some(pkce_bytes) = self.cache.get_bytes(&key).await? else {
+        let Some(bundle_bytes) = self.cache.get_bytes(&key).await? else {
             return Err(GoogleAuthError::OAuth(OAuthError::InvalidState));
         };
         // One-shot: prevent replay even within the TTL window.
         let _ = self.cache.delete(&key).await;
 
-        let pkce_verifier = std::str::from_utf8(&pkce_bytes)
-            .map_err(|_| GoogleAuthError::OAuth(OAuthError::InvalidState))?;
+        let bundle: StateBundle = serde_json::from_slice(&bundle_bytes).map_err(|e| {
+            warn!(error = %e, "state bundle corrupted in cache");
+            GoogleAuthError::OAuth(OAuthError::InvalidState)
+        })?;
 
-        let info = self.client.exchange(code, pkce_verifier).await?;
+        let info = self
+            .client
+            .exchange(code, &bundle.pkce, &bundle.nonce)
+            .await?;
         let user = self.resolve_user(&info).await?;
         let tokens = self.sessions.issue(user.id).await?;
 

@@ -56,6 +56,11 @@ use crate::config::Secret;
 
 type HmacSha256 = Hmac<Sha256>;
 
+/// Audience claim for access tokens. Validated on every `verify_access` call.
+/// If this service ever shares `JWT_SECRET` with another service, the other
+/// service must use a different audience so tokens are not cross-replayable.
+const ACCESS_TOKEN_AUD: &str = "api";
+
 // ─── Lua rotation script ─────────────────────────────────────────────────────
 //
 // KEYS[1] = refresh:{old_token}
@@ -107,6 +112,10 @@ pub struct SessionConfig {
 struct AccessClaims {
     sub: String,
     iss: String,
+    /// Audience — always `"api"`. Prevents cross-service token replay: a JWT
+    /// issued by this service cannot be accepted by another service that shares
+    /// the same `JWT_SECRET` but validates `aud` against a different value.
+    aud: String,
     iat: i64,
     exp: i64,
 }
@@ -210,6 +219,7 @@ impl RedisJwtSessions {
         let claims = AccessClaims {
             sub: user_id.0.to_string(),
             iss: self.config.jwt_issuer.clone(),
+            aud: ACCESS_TOKEN_AUD.to_string(),
             iat: now.timestamp(),
             exp: exp.timestamp(),
         };
@@ -339,6 +349,13 @@ impl SessionManager for RedisJwtSessions {
     fn verify_access(&self, access_token: &str) -> Result<UserId, SessionError> {
         let mut validation = Validation::new(Algorithm::HS256);
         validation.set_issuer(&[&self.config.jwt_issuer]);
+        validation.set_audience(&[ACCESS_TOKEN_AUD]);
+        // Require both `exp` and `aud` to be present and valid. `sub` is
+        // enforced structurally (non-Option field); `iss` via set_issuer above.
+        validation.set_required_spec_claims(&["exp", "iss", "aud", "sub"]);
+        // 30-second clock-skew leeway — tight enough to keep replay windows
+        // narrow, generous enough for containers with minor clock drift.
+        validation.leeway = 30;
         let data = decode::<AccessClaims>(access_token, &self.decoding, &validation)
             .map_err(|_| SessionError::Invalid)?;
         let uuid = Uuid::parse_str(&data.claims.sub).map_err(|_| SessionError::Invalid)?;

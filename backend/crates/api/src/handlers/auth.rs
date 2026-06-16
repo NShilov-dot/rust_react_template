@@ -9,7 +9,10 @@ use application::auth::{
 use application::ports::TokenPair;
 
 use crate::{
-    error::ApiError, extractors::AuthUser, handlers::users::UserResponse, state::AppState,
+    error::ApiError,
+    extractors::{AuthUser, SameSiteRequest},
+    handlers::users::UserResponse,
+    state::AppState,
 };
 
 /// Cookie name carrying the refresh token. HttpOnly — JS can't read it.
@@ -162,6 +165,7 @@ pub async fn login(
 
 pub async fn refresh(
     State(state): State<AppState>,
+    _csrf: SameSiteRequest,
     jar: CookieJar,
 ) -> Result<(CookieJar, Json<AccessResponse>), ApiError> {
     let presented = jar
@@ -195,6 +199,7 @@ pub async fn refresh(
 
 pub async fn logout(
     State(state): State<AppState>,
+    _csrf: SameSiteRequest,
     jar: CookieJar,
 ) -> Result<(CookieJar, StatusCode), ApiError> {
     if let Some(c) = jar.get(REFRESH_COOKIE) {

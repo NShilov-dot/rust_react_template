@@ -27,7 +27,7 @@ RUN npm run build
 # `nginx-unprivileged` is the same nginx image, repacked to run entirely
 # as a non-root user (uid 101) and listen on :8080 instead of :80.
 # Defence in depth: a container escape via nginx no longer lands as root.
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
+FROM nginxinc/nginx-unprivileged:1.31-alpine AS runtime
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
